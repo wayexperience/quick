@@ -1,10 +1,10 @@
 # Stack quick come risorsa Docker Compose di Coolify.
 #
 # Rete: abilitare "Connect to Predefined Network -> coolify" nella UI, così il
-# coolify-proxy raggiunge quick-server come `quick-server:8080`. Il routing del
-# wildcard *.<BASE_DOMAIN> NON sta nelle label (Coolify le rigenera sbagliate per
-# un wildcard reverse-proxy): è uno snippet a mano in /dynamic/quick.caddy sul
-# proxy. Le ${VAR} qui sotto le sostituisce Coolify nell'env della risorsa.
+# coolify-proxy raggiunge quick-server. Il routing del wildcard è nelle caddy
+# labels sotto (esplicite, perché quelle auto-generate da Coolify dal campo
+# dominio sono sbagliate per un wildcard reverse-proxy: lascia VUOTO il dominio
+# nella UI). Le ${VAR} qui sotto le sostituisce Coolify nell'env della risorsa.
 #
 # Due client OAuth Google distinti:
 #  - CLI:          tipo "Desktop app" (solo client_id, PKCE)   -> QUICK_CLI_CLIENT_ID
@@ -33,10 +33,16 @@ services:
       QUICK_S3_SECRET_KEY: ${QUICK_S3_SECRET_KEY:-}
       QUICK_S3_PREFIX: ${QUICK_S3_PREFIX:-}
       QUICK_S3_USE_SSL: ${QUICK_S3_USE_SSL:-true}
-    # Niente label caddy qui: il routing del wildcard è gestito a mano in
-    # /dynamic/quick.caddy sul proxy (Coolify rigenererebbe label sbagliate per
-    # un wildcard reverse-proxy). Serve solo che il container sia sulla rete
-    # `coolify` ("Connect to Predefined Network" nella UI) per essere raggiunto.
+    # Routing via caddy-docker-proxy. NON impostare un dominio nella UI Coolify:
+    # genererebbe label `caddy_0.*` sbagliate per un wildcard reverse-proxy
+    # (handle_path + try_files /index.php). Le definiamo noi, esplicite e corrette.
+    # Domini NON sostituiti da Coolify dentro le label -> valore letterale.
+    # caddy_ingress_network=coolify: la rete su cui il proxy raggiunge il container.
+    labels:
+      caddy: "*.quick.way.srl"
+      caddy.tls.dns: "cloudflare {env.CF_API_TOKEN}"
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy_ingress_network: coolify
     volumes:
       # Solo per QUICK_STORAGE=local; con s3 il container è stateless e questi
       # mount restano inutilizzati (rimuovili nella UI Coolify se usi s3).
