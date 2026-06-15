@@ -1,10 +1,10 @@
 # Stack quick come risorsa Docker Compose di Coolify.
 #
 # Rete: abilitare "Connect to Predefined Network -> coolify" nella UI, così il
-# coolify-proxy raggiunge quick-server. Il routing del wildcard è nelle caddy
-# labels sotto (esplicite, perché quelle auto-generate da Coolify dal campo
-# dominio sono sbagliate per un wildcard reverse-proxy: lascia VUOTO il dominio
-# nella UI). Le ${VAR} qui sotto le sostituisce Coolify nell'env della risorsa.
+# coolify-proxy raggiunge quick-server. Il routing del wildcard si imposta nel
+# campo Domains della risorsa (es. https://*.<tuo-dominio>): Coolify genera lui
+# le label caddy. Niente label di routing qui (repo generico). Le ${VAR} qui
+# sotto le sostituisce Coolify nell'env della risorsa.
 #
 # Due client OAuth Google distinti:
 #  - CLI:          tipo "Desktop app" (solo client_id, PKCE)   -> QUICK_CLI_CLIENT_ID
@@ -36,16 +36,10 @@ services:
     # Routing via caddy-docker-proxy. NON impostare un dominio nella UI Coolify:
     # genererebbe label `caddy_0.*` sbagliate per un wildcard reverse-proxy
     # (handle_path + try_files /index.php). Le definiamo noi, esplicite e corrette.
-    # Dominio generico: Coolify NON sostituisce ${...} nelle label, quindi usiamo
-    # la sostituzione env di Caddy stesso {$QUICK_BASE_DOMAIN}, che legge l'env del
-    # PROXY (come {env.CF_API_TOKEN} per il TLS). -> aggiungi QUICK_BASE_DOMAIN
-    # all'env del coolify-proxy (Proxy -> Configuration), accanto a CF_API_TOKEN.
-    # Niente domini cablati nel repo. caddy_ingress_network: rete proxy<->container.
-    labels:
-      caddy: "*.{$QUICK_BASE_DOMAIN}"
-      caddy.tls.dns: "cloudflare {env.CF_API_TOKEN}"
-      caddy.reverse_proxy: "{{upstreams 8080}}"
-      caddy_ingress_network: coolify
+    # Routing: nessuna label qui. Il dominio (wildcard *.<tuo-dominio>) si imposta
+    # nel campo Domains della risorsa in Coolify, che genera lui le label caddy.
+    # Repo generico: zero domini cablati. Serve "Connect to Predefined Network ->
+    # coolify" perché il proxy raggiunga il container.
     volumes:
       # Solo per QUICK_STORAGE=local; con s3 il container è stateless e questi
       # mount restano inutilizzati (rimuovili nella UI Coolify se usi s3).
