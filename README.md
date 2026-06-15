@@ -70,7 +70,7 @@ same-origin, identità già risolta dall'SSO, storage astratto — ma non è imp
 | `internal/quick/` | Contratto condiviso CLI↔server (DTO, validazione nomi, modi di accesso) |
 | `internal/storage/` | Backend storage: `local` (FS) e `s3` (minio-go) |
 | `docker-compose.yaml` | Stack per Coolify (label Caddy + env) |
-| `oauth2-proxy.cfg` + env | SSO Google |
+| oauth2-proxy (env `OAUTH2_PROXY_*`) | SSO Google |
 
 ## Configurazione (env)
 
