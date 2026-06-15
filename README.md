@@ -74,7 +74,7 @@ same-origin, identità già risolta dall'SSO, storage astratto — ma non è imp
 
 ## Configurazione (env)
 
-Vedi `.env.example`. In sintesi: `QUICK_BASE_DOMAIN`, `QUICK_ALLOWED_DOMAIN`,
+Vedi `.env.example`. In sintesi: `QUICK_BASE_DOMAIN`, `QUICK_ALLOWED_DOMAINS` (uno, lista `a,b`, o `*`),
 `GOOGLE_CLIENT_ID/SECRET` (client OAuth **Web** per oauth2-proxy), `COOKIE_SECRET`,
 `QUICK_META_SECRET`, `QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
 

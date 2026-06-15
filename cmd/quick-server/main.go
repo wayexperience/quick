@@ -44,7 +44,7 @@ func main() {
 	s := &server{
 		store:        store,
 		baseDomain:   os.Getenv("QUICK_BASE_DOMAIN"),
-		domain:       os.Getenv("QUICK_ALLOWED_DOMAIN"),
+		domain:       os.Getenv("QUICK_ALLOWED_DOMAINS"),
 		clientID:     os.Getenv("QUICK_OAUTH_CLIENT_ID"),
 		clientSecret: os.Getenv("QUICK_OAUTH_CLIENT_SECRET"),
 		oauth2URL:    quick.Env("QUICK_OAUTH2_URL", "http://oauth2-proxy:4180"),
