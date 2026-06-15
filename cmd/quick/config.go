@@ -17,10 +17,11 @@ import (
 )
 
 type cliConfig struct {
-	Server        string `json:"server"`
-	OAuthClientID string `json:"oauth_client_id"`
-	HostedDomain  string `json:"hosted_domain"`
-	BaseDomain    string `json:"base_domain"`
+	Server            string `json:"server"`
+	OAuthClientID     string `json:"oauth_client_id"`
+	OAuthClientSecret string `json:"oauth_client_secret,omitempty"`
+	HostedDomain      string `json:"hosted_domain"`
+	BaseDomain        string `json:"base_domain"`
 }
 
 func configPath() string {
@@ -97,8 +98,9 @@ func fetchConfig(server string) (*cliConfig, error) {
 		return nil, err
 	}
 	return &cliConfig{
-		OAuthClientID: r.OAuthClientID,
-		HostedDomain:  r.HostedDomain,
-		BaseDomain:    r.BaseDomain,
+		OAuthClientID:     r.OAuthClientID,
+		OAuthClientSecret: r.OAuthClientSecret,
+		HostedDomain:      r.HostedDomain,
+		BaseDomain:        r.BaseDomain,
 	}, nil
 }

@@ -52,8 +52,12 @@ type DeployResponse struct {
 // alla CLI per auto-configurarsi senza valori hardcoded.
 type ConfigResponse struct {
 	OAuthClientID string `json:"oauth_client_id"`
-	HostedDomain  string `json:"hosted_domain"`
-	BaseDomain    string `json:"base_domain"`
+	// OAuthClientSecret è valorizzato solo se il server riusa un client OAuth di
+	// tipo "Web" per la CLI (che richiede il secret nello scambio token). Per un
+	// client "Desktop" resta vuoto e la CLI usa solo PKCE.
+	OAuthClientSecret string `json:"oauth_client_secret,omitempty"`
+	HostedDomain      string `json:"hosted_domain"`
+	BaseDomain        string `json:"base_domain"`
 }
 
 // Env restituisce la variabile d'ambiente k, o def se vuota/assente.

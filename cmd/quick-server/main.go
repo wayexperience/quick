@@ -24,15 +24,16 @@ import (
 const maxUpload = 200 << 20 // 200 MiB per deploy
 
 type server struct {
-	store      storage.Backend
-	meta       *metaStore
-	baseDomain string // dominio dei siti, es. quick.example.com
-	domain     string // hosted domain Google ammesso (email) + esposto in /api/config
-	clientID   string // audience dell'ID token + esposto in /api/config
-	oauth2URL  string // base URL interno di oauth2-proxy
-	reserved   map[string]bool
-	oauthProxy *httputil.ReverseProxy
-	noAuth     bool // solo sviluppo locale
+	store        storage.Backend
+	meta         *metaStore
+	baseDomain   string // dominio dei siti, es. quick.example.com
+	domain       string // hosted domain Google ammesso (email) + esposto in /api/config
+	clientID     string // audience dell'ID token + esposto in /api/config
+	clientSecret string // opzionale: secret del client CLI (solo se è un client Web), servito via /api/config
+	oauth2URL    string // base URL interno di oauth2-proxy
+	reserved     map[string]bool
+	oauthProxy   *httputil.ReverseProxy
+	noAuth       bool // solo sviluppo locale
 }
 
 func main() {
@@ -41,13 +42,14 @@ func main() {
 		log.Fatal(err)
 	}
 	s := &server{
-		store:      store,
-		baseDomain: os.Getenv("QUICK_BASE_DOMAIN"),
-		domain:     os.Getenv("QUICK_ALLOWED_DOMAIN"),
-		clientID:   os.Getenv("QUICK_OAUTH_CLIENT_ID"),
-		oauth2URL:  quick.Env("QUICK_OAUTH2_URL", "http://oauth2-proxy:4180"),
-		reserved:   reservedSet(),
-		noAuth:     os.Getenv("QUICK_DEV_NOAUTH") == "1",
+		store:        store,
+		baseDomain:   os.Getenv("QUICK_BASE_DOMAIN"),
+		domain:       os.Getenv("QUICK_ALLOWED_DOMAIN"),
+		clientID:     os.Getenv("QUICK_OAUTH_CLIENT_ID"),
+		clientSecret: os.Getenv("QUICK_OAUTH_CLIENT_SECRET"),
+		oauth2URL:    quick.Env("QUICK_OAUTH2_URL", "http://oauth2-proxy:4180"),
+		reserved:     reservedSet(),
+		noAuth:       os.Getenv("QUICK_DEV_NOAUTH") == "1",
 	}
 	s.meta = newMetaStore(store, []byte(quick.Env("QUICK_META_SECRET", "dev-insecure-secret")), 5*time.Second)
 	if err := s.setupOAuthProxy(); err != nil {

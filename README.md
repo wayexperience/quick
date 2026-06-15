@@ -75,9 +75,14 @@ same-origin, identità già risolta dall'SSO, storage astratto — ma non è imp
 ## Configurazione (env)
 
 Vedi `.env.example`. In sintesi: `QUICK_BASE_DOMAIN`, `QUICK_ALLOWED_DOMAIN`,
-`QUICK_CLI_CLIENT_ID` (client OAuth **Desktop** per la CLI), `GOOGLE_CLIENT_ID/SECRET`
-(client OAuth **Web** per oauth2-proxy), `COOKIE_SECRET`, `QUICK_META_SECRET`,
-`QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
+`GOOGLE_CLIENT_ID/SECRET` (client OAuth **Web** per oauth2-proxy), `COOKIE_SECRET`,
+`QUICK_META_SECRET`, `QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
+
+Client OAuth della CLI (`QUICK_CLI_CLIENT_ID` / `QUICK_CLI_CLIENT_SECRET`): due modi
+- **Desktop app** → imposta solo l'ID; la CLI usa PKCE senza secret.
+- **riuso di un client Web** (anche lo stesso di oauth2-proxy) → imposta ID + secret;
+  il secret viene servito alla CLI via `/api/config` (accettabile per il client loopback
+  PKCE-bound). È il modo per riusare un client Web esistente senza cablare nulla.
 
 ## Deploy su Coolify (4.1.x)
 

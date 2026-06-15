@@ -14,9 +14,10 @@ import (
 func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(quick.ConfigResponse{
-		OAuthClientID: s.clientID,
-		HostedDomain:  s.domain,
-		BaseDomain:    s.baseDomain,
+		OAuthClientID:     s.clientID,
+		OAuthClientSecret: s.clientSecret,
+		HostedDomain:      s.domain,
+		BaseDomain:        s.baseDomain,
 	})
 }
 

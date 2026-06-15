@@ -16,7 +16,8 @@ services:
     environment:
       QUICK_BASE_DOMAIN: ${QUICK_BASE_DOMAIN}        # es. quick.example.com
       QUICK_ALLOWED_DOMAIN: ${QUICK_ALLOWED_DOMAIN}  # hosted domain Google (email)
-      QUICK_OAUTH_CLIENT_ID: ${QUICK_CLI_CLIENT_ID}  # client Desktop della CLI (audience + /api/config)
+      QUICK_OAUTH_CLIENT_ID: ${QUICK_CLI_CLIENT_ID}          # client della CLI (audience + /api/config)
+      QUICK_OAUTH_CLIENT_SECRET: ${QUICK_CLI_CLIENT_SECRET:-} # solo se riusi un client Web per la CLI (vuoto per Desktop/PKCE)
       QUICK_OAUTH2_URL: http://oauth2-proxy:4180
       QUICK_META_SECRET: ${QUICK_META_SECRET}
       QUICK_STORAGE: ${QUICK_STORAGE:-local}

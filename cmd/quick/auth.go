@@ -68,11 +68,13 @@ func idToken(cfg *cliConfig) (string, error) {
 		return t.IDToken, nil
 	}
 	if err == nil && t.RefreshToken != "" {
-		if nt, rerr := tokenRequest(url.Values{
+		v := url.Values{
 			"client_id":     {cfg.OAuthClientID},
 			"refresh_token": {t.RefreshToken},
 			"grant_type":    {"refresh_token"},
-		}); rerr == nil {
+		}
+		withSecret(v, cfg)
+		if nt, rerr := tokenRequest(v); rerr == nil {
 			if nt.RefreshToken == "" {
 				nt.RefreshToken = t.RefreshToken
 			}
@@ -146,17 +148,27 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 		return nil, errors.New("timeout login")
 	}
 
-	t, err := tokenRequest(url.Values{
+	v := url.Values{
 		"client_id":     {cfg.OAuthClientID},
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
 		"grant_type":    {"authorization_code"},
 		"code_verifier": {verifier},
-	})
+	}
+	withSecret(v, cfg)
+	t, err := tokenRequest(v)
 	if err != nil {
 		return nil, err
 	}
 	return t, saveToken(t)
+}
+
+// withSecret aggiunge il client_secret allo scambio token solo se il server ne
+// ha fornito uno (client OAuth di tipo Web riusato per la CLI).
+func withSecret(v url.Values, cfg *cliConfig) {
+	if cfg.OAuthClientSecret != "" {
+		v.Set("client_secret", cfg.OAuthClientSecret)
+	}
 }
 
 func tokenRequest(v url.Values) (*tokenSet, error) {
