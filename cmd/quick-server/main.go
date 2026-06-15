@@ -141,7 +141,7 @@ func (s *server) authenticate(r *http.Request) (string, error) {
 	return info.Email, nil
 }
 
-// domainAllowed verifica l'hosted domain Google contro QUICK_ALLOWED_DOMAIN, che
+// domainAllowed verifica l'hosted domain Google contro QUICK_ALLOWED_DOMAINS, che
 // può essere vuoto o "*" (qualsiasi account), un singolo dominio, o una lista
 // comma-separated. Coerente con OAUTH2_PROXY_EMAIL_DOMAINS.
 func (s *server) domainAllowed(hd string) bool {
