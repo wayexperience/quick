@@ -1,0 +1,7 @@
+.env
+/bin/
+/quick
+/quick-server
+sites/
+meta/
+AGENTS.md
