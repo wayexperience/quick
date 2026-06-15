@@ -1,9 +1,10 @@
 # Stack quick come risorsa Docker Compose di Coolify.
 #
-# Coolify gestisce rete e routing: NON dichiarare custom network qui; nella UI
-# abilitare "Connect to Predefined Network -> coolify" così il caddy-docker-proxy
-# raggiunge quick-server via le label sotto. Le ${VAR} le sostituisce Coolify
-# dall'env della risorsa.
+# Rete: abilitare "Connect to Predefined Network -> coolify" nella UI, così il
+# coolify-proxy raggiunge quick-server come `quick-server:8080`. Il routing del
+# wildcard *.<BASE_DOMAIN> NON sta nelle label (Coolify le rigenera sbagliate per
+# un wildcard reverse-proxy): è uno snippet a mano in /dynamic/quick.caddy sul
+# proxy. Le ${VAR} qui sotto le sostituisce Coolify nell'env della risorsa.
 #
 # Due client OAuth Google distinti:
 #  - CLI:          tipo "Desktop app" (solo client_id, PKCE)   -> QUICK_CLI_CLIENT_ID
@@ -32,10 +33,10 @@ services:
       QUICK_S3_SECRET_KEY: ${QUICK_S3_SECRET_KEY:-}
       QUICK_S3_PREFIX: ${QUICK_S3_PREFIX:-}
       QUICK_S3_USE_SSL: ${QUICK_S3_USE_SSL:-true}
-    labels:
-      caddy: "*.${QUICK_BASE_DOMAIN}"
-      caddy.reverse_proxy: "{{upstreams 8080}}"
-      caddy.tls.dns: "cloudflare {env.CF_API_TOKEN}"
+    # Niente label caddy qui: il routing del wildcard è gestito a mano in
+    # /dynamic/quick.caddy sul proxy (Coolify rigenererebbe label sbagliate per
+    # un wildcard reverse-proxy). Serve solo che il container sia sulla rete
+    # `coolify` ("Connect to Predefined Network" nella UI) per essere raggiunto.
     volumes:
       # Solo per QUICK_STORAGE=local; con s3 il container è stateless e questi
       # mount restano inutilizzati (rimuovili nella UI Coolify se usi s3).
