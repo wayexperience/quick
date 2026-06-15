@@ -36,10 +36,10 @@ services:
     # Routing via caddy-docker-proxy. NON impostare un dominio nella UI Coolify:
     # genererebbe label `caddy_0.*` sbagliate per un wildcard reverse-proxy
     # (handle_path + try_files /index.php). Le definiamo noi, esplicite e corrette.
-    # Domini NON sostituiti da Coolify dentro le label -> valore letterale.
+    # Il dominio resta generico via ${QUICK_BASE_DOMAIN} (niente domini cablati nel repo).
     # caddy_ingress_network=coolify: la rete su cui il proxy raggiunge il container.
     labels:
-      caddy: "*.quick.way.srl"
+      caddy: "*.${QUICK_BASE_DOMAIN}"
       caddy.tls.dns: "cloudflare {env.CF_API_TOKEN}"
       caddy.reverse_proxy: "{{upstreams 8080}}"
       caddy_ingress_network: coolify
