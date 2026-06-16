@@ -19,13 +19,35 @@ go install github.com/wayexperience/quick/cmd/quick@latest   # finisce in $(go e
 ```bash
 export QUICK_SERVER=https://quick.example.com   # una volta (o usa --server)
 quick login                                     # login Google nel browser
-quick deploy ./ilmiosito --name foo             # -> https://foo.quick.example.com
+quick deploy foo ./ilmiosito                    # -> https://foo.quick.example.com
 ```
 
-Senza `--name` usa il nome della cartella. Il deploy carica la cartella e
-sovrascrive il sito (i file rimossi spariscono). I file/cartelle nascosti
-(`.git`, `.DS_Store`, `.env`, …) sono **esclusi** — tranne `.well-known`.
-Sottodomini nuovi sono istantanei (il wildcard copre già il certificato).
+La sintassi è `quick deploy <sito> [cartella]` (cartella opzionale, default quella
+corrente). Senza `<sito>` usa il `.quick` della cartella o, in mancanza, il nome
+della cartella stessa.
+
+Il deploy è un **mirror**: carica la cartella e sostituisce l'intero sito (i file
+rimossi spariscono). Prima di pubblicare la CLI mostra un riepilogo e **chiede
+conferma** (`--yes` per saltarla, `--dry-run` per vedere cosa salirebbe senza
+pubblicare); un deploy senza file è **bloccato** (`--force` per svuotare di
+proposito). Sottodomini nuovi sono istantanei (il wildcard copre già il certificato).
+
+**Cosa non viene pubblicato**, in tre livelli: (1) sicurezza, sempre — file nascosti
+(`.git`, `.env`, `.quick`… tranne `.well-known`) e segreti (`*.pem`, `*.key`, `id_rsa`,
+keystore); (2) comodità, predefiniti e scavalcabili — `node_modules/`, `vendor/`,
+`*.log`, temporanei; (3) `.quickignore`, se presente, è la fonte di verità delle
+esclusioni di comodità (sintassi gitignore, con `!`). Crealo con `quick ignore`.
+
+**Convenzioni del sito servito**: `index.html` come indice di cartella; `/about`
+serve `about.html` o `about/index.html` (URL puliti); `404.html` in radice per i
+path inesistenti (status 404); `200.html` in radice come app shell SPA (servita 200
+per le rotte che non sono file). Senza `200.html`, un path mancante dà un 404 vero.
+
+`quick status` mostra server, login, visibilità del sito e cosa salirebbe col deploy.
+`quick skill` pubblica una Agent Skill (`SKILL.md`) che insegna a un agente come usare
+la CLI. `SKILL.md` è un formato aperto cross-vendor (Claude Code, Codex, Gemini,
+Cursor…): default `~/.claude/skills/quick/`, oppure `--target codex|gemini|…`,
+`--project` (cartella del repo), `--all` (tutti gli agenti noti).
 
 Al primo deploy viene scritto un file **`.quick`** nella cartella (nome del sito +
 server), così dalla cartella puoi ripetere senza parametri: `quick deploy`,
@@ -61,6 +83,26 @@ quick delete foo     # rimuove contenuti e metadata (irreversibile)
 
 L'eliminazione chiede conferma; se il sito è pubblico o protetto da codice devi
 ridigitarne il nome. Un sito bloccato lo può eliminare solo il suo owner.
+
+## Roadmap (convenzioni static-host, next step)
+
+Convenzioni "via file, zero config" non ancora implementate, in ordine di utilità:
+
+- **`_redirects`** (stile Netlify): regole di redirect/rewrite per sito, incluso il
+  catch-all SPA esplicito (`/* /index.html 200`) come alternativa a `200.html`.
+- **`_headers`**: header per-path (Cache-Control, CSP…) definiti dal sito.
+- **Default di `Cache-Control`**: HTML `no-cache`, asset con `max-age` lungo (al meglio
+  con asset con hash nel nome).
+- **Precompressi brotli/gzip**: servire `file.css.br`/`.gz` se presente e il browser
+  lo accetta.
+
+Lato piattaforma e integrazione agenti:
+
+- **Tutti gli endpoint sul dominio nudo** (es. `quick.way.srl`): unificare `/api/*` e
+  i comandi sull'apex invece di passare da `deploy.<dominio>`.
+- **Endpoint `/mcp`**: esporre quick come server MCP (deploy, status, publish… come
+  strumenti chiamabili da qualunque agente, non solo come documentazione). In Go ci
+  sono SDK MCP ufficiali, quindi è la via naturale per le *azioni* cross-agent.
 
 ## Architettura
 

@@ -1,8 +1,9 @@
 // quick è la CLI di way-quick (hosting statico interno, generico).
 //
-//	quick                                         # stato: server, sito, visibilità, deploy
+//	quick                                         # panoramica + help
+//	quick status                                  # stato: server, sito, visibilità, deploy
 //	quick login                                   # login Google (una volta)
-//	quick deploy [cartella] --name <sito>         # pubblica una cartella (mirror)
+//	quick deploy [<sito>] [cartella]              # pubblica una cartella (mirror)
 //	quick ignore [cartella]                       # crea un .quickignore modificabile
 //	quick publish|unpublish|private|lock|unlock <sito>
 //
@@ -33,16 +34,20 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
-		statusCmd(nil) // `quick` da solo: mostra lo stato invece di un errore
+		overview() // `quick` da solo: panoramica + help, mai un errore
 		return
 	}
 	switch os.Args[1] {
+	case "help", "--help", "-h":
+		printUsage(os.Stdout) // help esplicito: stdout, exit 0
 	case "version", "--version", "-v":
 		printVersion()
 	case "status":
 		statusCmd(os.Args[2:])
 	case "ignore":
 		ignoreCmd(os.Args[2:])
+	case "skill":
+		skillCmd(os.Args[2:])
 	case "login":
 		fs := flag.NewFlagSet("login", flag.ExitOnError)
 		server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
@@ -87,30 +92,63 @@ func printVersion() {
 	}
 }
 
-func usage() {
-	fmt.Fprintln(os.Stderr, `uso (server via --server o QUICK_SERVER):
-  quick                             # stato: server, sito, visibilità, deploy
-  quick version
-  quick login
-  quick deploy [cartella] --name <sito> [--dry-run] [--yes]
+// printUsage scrive l'elenco comandi su w (stdout per l'help, stderr per gli errori).
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, `uso (server via --server o QUICK_SERVER):
+  quick                             # panoramica + questo aiuto
+  quick status                      # stato: server, sito, visibilità, deploy
+  quick login                       # accesso Google (una volta)
+  quick deploy [<sito>] [cartella]  # pubblica una cartella (default: corrente)
   quick ignore  [cartella]          # crea un .quickignore modificabile
+  quick skill   [--target codex|gemini|…] [--project] [--all]  # pubblica la Agent Skill (SKILL.md)
   quick delete    <sito>            # elimina il sito (irreversibile)
   quick publish   <sito>            # apri al pubblico (niente SSO)
   quick unpublish <sito>            # torna dietro SSO aziendale
   quick private   <sito> [--code X] # accesso con codice (generato se assente)
   quick lock      <sito>            # solo tu puoi sovrascriverlo
-  quick unlock    <sito>`)
+  quick unlock    <sito>
+  quick version`)
+}
+
+// usage stampa l'uso su stderr ed esce con errore (comando sconosciuto).
+func usage() {
+	printUsage(os.Stderr)
 	os.Exit(2)
 }
 
+// overview è ciò che mostra `quick` da solo: una riga di contesto (senza rete né
+// prompt) e poi l'elenco comandi. Per lo stato completo c'è `quick status`.
+func overview() {
+	if cfg := loadConfig(); cfg != nil && cfg.Server != "" {
+		auth := "non autenticato (esegui `quick login`)"
+		if haveLogin() {
+			auth = "autenticato"
+		}
+		fmt.Printf("Server: %s — %s\n", cfg.Server, auth)
+		if sf := loadSiteFile("."); sf != nil {
+			fmt.Printf("Cartella collegata al sito: %s\n", sf.Name)
+		}
+		fmt.Println()
+	}
+	printUsage(os.Stdout)
+}
+
 func deploy(args []string) {
-	dir := "."
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		dir, args = args[0], args[1:]
+	// Posizionali: [<sito>] [cartella]. Si fermano al primo flag.
+	var pos []string
+	for len(args) > 0 && !strings.HasPrefix(args[0], "-") && len(pos) < 2 {
+		pos = append(pos, args[0])
+		args = args[1:]
+	}
+	posSite, posDir := "", ""
+	if len(pos) >= 1 {
+		posSite = pos[0]
+	}
+	if len(pos) >= 2 {
+		posDir = pos[1]
 	}
 
 	fs := flag.NewFlagSet("deploy", flag.ExitOnError)
-	name := fs.String("name", "", "nome del sito (sottodominio); default: nome cartella")
 	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
 	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
 	public := fs.Bool("public", false, "rendi il sito pubblico (niente SSO)")
@@ -130,15 +168,27 @@ func deploy(args []string) {
 		fatal(fmt.Errorf("--public e --private sono mutuamente esclusivi"))
 	}
 
+	dir := "."
+	if posDir != "" {
+		dir = posDir
+	}
+
+	// Nome sito: posizionale > .quick > nome della cartella.
 	sf := loadSiteFile(dir)
-	if *name == "" && sf != nil {
-		*name = sf.Name
+	siteName := posSite
+	if siteName == "" && sf != nil {
+		siteName = sf.Name
 	}
-	if *name == "" {
+	if siteName == "" {
 		abs, _ := filepath.Abs(dir)
-		*name = filepath.Base(abs)
+		siteName = filepath.Base(abs)
 	}
+	name := &siteName
 	if !quick.ValidName(*name) {
+		// Probabile errore di ordine: l'utente ha messo la cartella come 1° argomento.
+		if posSite != "" && posDir == "" && looksLikePath(posSite) {
+			fatal(fmt.Errorf("%q sembra una cartella: la sintassi è `quick deploy <sito> [cartella]` (sito per primo)", posSite))
+		}
 		fatal(fmt.Errorf("nome sito %q non valido (usa a-z, 0-9, trattino)", *name))
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
@@ -160,7 +210,7 @@ func deploy(args []string) {
 	}
 
 	// Se la cartella è già collegata a un altro sito (.quick), avvisa prima di
-	// fare deploy altrove: facile da innescare con --name sbagliato.
+	// fare deploy altrove: facile da innescare col sito sbagliato.
 	if !confirmSiteMismatch(sf, *name, "fare deploy su") {
 		return
 	}
@@ -269,6 +319,16 @@ func tarGzFromPlan(dir string, p *plan) (*bytes.Buffer, error) {
 		return nil, err
 	}
 	return &buf, nil
+}
+
+// looksLikePath indica che l'argomento somiglia a una cartella, non a un nome di
+// sito: utile per dare un errore chiaro se l'utente inverte l'ordine.
+func looksLikePath(s string) bool {
+	if strings.ContainsAny(s, "/\\.") {
+		return true
+	}
+	fi, err := os.Stat(s)
+	return err == nil && fi.IsDir()
 }
 
 func fatal(err error) {

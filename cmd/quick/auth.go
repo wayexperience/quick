@@ -75,6 +75,13 @@ func idToken(cfg *cliConfig) (string, error) {
 	return nt.IDToken, nil
 }
 
+// haveLogin indica se esiste un login salvato (senza rete): basta un ID token o
+// un refresh token in cache. Per la panoramica veloce, non verifica la scadenza.
+func haveLogin() bool {
+	t, err := loadToken()
+	return err == nil && (t.IDToken != "" || t.RefreshToken != "")
+}
+
 // silentToken prova a fornire un ID token senza interazione: usa la cache e, se
 // scaduta, il refresh token. ok=false se servirebbe un login interattivo.
 func silentToken(cfg *cliConfig) (string, bool) {
