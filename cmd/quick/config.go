@@ -73,29 +73,57 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 		server = os.Getenv("QUICK_SERVER")
 	}
 	saved := loadConfig()
-	if server == "" && saved != nil {
-		server = saved.Server
-	}
 	if server == "" {
-		server = promptServer() // chiedi una volta, poi viene ricordato
+		if saved != nil && saved.OAuthClientID != "" {
+			return saved, nil // niente server esplicito: uso quello ricordato
+		}
+		server = promptServer()
 	}
 	if server == "" {
 		return nil, errors.New("server richiesto (--server, QUICK_SERVER, o inseriscilo al prompt)")
 	}
-	if !strings.Contains(server, "://") {
-		server = "https://" + server
+
+	cands := candidates(server)
+	// se un candidato coincide col server già salvato, riuso la cache
+	if saved != nil && saved.OAuthClientID != "" {
+		for _, c := range cands {
+			if c == saved.Server {
+				return saved, nil
+			}
+		}
 	}
-	server = strings.TrimRight(server, "/")
-	if saved != nil && saved.Server == server && saved.OAuthClientID != "" {
-		return saved, nil
+	// provo i candidati finché /api/config risponde (es. apex -> deploy.<dominio>)
+	var lastErr error
+	for _, cand := range cands {
+		c, err := fetchConfig(cand)
+		if err == nil {
+			c.Server = cand
+			saveConfig(c)
+			return c, nil
+		}
+		lastErr = err
 	}
-	c, err := fetchConfig(server)
-	if err != nil {
-		return nil, err
+	return nil, fmt.Errorf("server non raggiungibile (provati: %s): %w", strings.Join(cands, ", "), lastErr)
+}
+
+// candidates espande un input (anche solo un dominio, es. "quick.way.srl") negli
+// URL da provare per /api/config: aggiunge https:// se manca, e prova anche
+// deploy.<dominio> come fallback (l'apex di un wildcard non è instradato).
+func candidates(input string) []string {
+	input = strings.TrimRight(strings.TrimSpace(input), "/")
+	host := input
+	if i := strings.Index(input, "://"); i >= 0 {
+		host = input[i+3:]
 	}
-	c.Server = server
-	saveConfig(c)
-	return c, nil
+	first := input
+	if !strings.Contains(first, "://") {
+		first = "https://" + first
+	}
+	out := []string{first}
+	if !strings.Contains(host, "/") && !strings.HasPrefix(host, "deploy.") {
+		out = append(out, "https://deploy."+host)
+	}
+	return out
 }
 
 func fetchConfig(server string) (*cliConfig, error) {
