@@ -59,7 +59,7 @@ func main() {
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 	http.HandleFunc("/api/config", s.handleConfig)
 	http.HandleFunc("/api/deploy", s.handleDeploy)
-	http.HandleFunc("/api/site/", s.handlePolicy)
+	http.HandleFunc("/api/site/", s.handleSiteAPI)
 	http.HandleFunc("/__quick/code", s.handleCodePage)
 	http.HandleFunc("/oauth2/", s.handleOAuth2)
 	http.HandleFunc("/", s.handleSite) // catch-all: policy + serve

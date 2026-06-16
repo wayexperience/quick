@@ -48,6 +48,8 @@ func main() {
 		fmt.Println("✓ login eseguito")
 	case "deploy":
 		deploy(os.Args[2:])
+	case "delete", "rm":
+		deleteCmd(os.Args[2:])
 	case "publish", "unpublish", "private", "lock", "unlock":
 		policyCmd(os.Args[1], os.Args[2:])
 	default:
@@ -83,6 +85,7 @@ func usage() {
   quick version
   quick login
   quick deploy [cartella] --name <sito>
+  quick delete    <sito>            # elimina il sito (irreversibile)
   quick publish   <sito>            # apri al pubblico (niente SSO)
   quick unpublish <sito>            # torna dietro SSO aziendale
   quick private   <sito> [--code X] # accesso con codice (generato se assente)
@@ -128,6 +131,17 @@ func deploy(args []string) {
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		fatal(fmt.Errorf("%q non è una cartella", dir))
+	}
+
+	// Se la cartella è già collegata a un altro sito (.quick), avvisa prima di
+	// fare deploy altrove: facile da innescare con --name sbagliato.
+	if sf != nil && sf.Name != "" && sf.Name != *name {
+		fmt.Fprintf(os.Stderr, "⚠️  questa cartella è collegata al sito %q (.quick), ma stai per fare deploy su %q.\n", sf.Name, *name)
+		fmt.Fprint(os.Stderr, "Procedo lo stesso? [s/N]: ")
+		if !yesNo(readLine()) {
+			fmt.Fprintln(os.Stderr, "annullato")
+			return
+		}
 	}
 
 	srv := *server

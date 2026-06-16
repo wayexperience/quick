@@ -29,7 +29,8 @@ Sottodomini nuovi sono istantanei (il wildcard copre già il certificato).
 
 Al primo deploy viene scritto un file **`.quick`** nella cartella (nome del sito +
 server), così dalla cartella puoi ripetere senza parametri: `quick deploy`,
-`quick publish`, ecc. (`.quick` non viene caricato.)
+`quick publish`, ecc. (`.quick` non viene caricato.) Se provi a fare deploy su un
+sito diverso da quello collegato, la CLI te lo segnala e chiede conferma.
 
 Il server si dà come dominio nudo (`quick.example.com`) o URL completo; la CLI
 aggiunge `https://`, prova anche `deploy.<dominio>`, e ricorda quello che risponde.
@@ -51,6 +52,15 @@ inserimento codice, poi un cookie firmato vale 7 giorni; SSO → verifica la ses
 Google via oauth2-proxy. Il **lock** registra te (dalla tua identità Google) come
 owner: gli altri non possono più sovrascrivere né cambiare policy finché non fai
 `unlock`.
+
+## Eliminare un sito
+
+```bash
+quick delete foo     # rimuove contenuti e metadata (irreversibile)
+```
+
+L'eliminazione chiede conferma; se il sito è pubblico o protetto da codice devi
+ridigitarne il nome. Un sito bloccato lo può eliminare solo il suo owner.
 
 ## Architettura
 

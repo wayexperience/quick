@@ -33,12 +33,19 @@ type PolicyRequest struct {
 	Locked *bool   `json:"locked,omitempty"`
 }
 
-// PolicyResponse è la risposta degli endpoint di policy.
+// PolicyResponse è la risposta degli endpoint di policy (POST muta, GET legge).
 type PolicyResponse struct {
 	Site   string `json:"site"`
 	Access string `json:"access"`
 	Locked bool   `json:"locked"`
 	Owner  string `json:"owner"`
+	Exists bool   `json:"exists"` // il sito ha contenuti o metadata
+}
+
+// DeleteResponse è la risposta di DELETE /api/site/<name>.
+type DeleteResponse struct {
+	Site    string `json:"site"`
+	Deleted bool   `json:"deleted"`
 }
 
 // DeployResponse è la risposta di /api/deploy.

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,6 +84,13 @@ func (m *metaStore) save(site string, p policy) error {
 	m.cache[site] = cachedPolicy{p, time.Now()}
 	m.mu.Unlock()
 	return nil
+}
+
+// forget invalida la cache per un sito (es. dopo l'eliminazione).
+func (m *metaStore) forget(site string) {
+	m.mu.Lock()
+	delete(m.cache, site)
+	m.mu.Unlock()
 }
 
 func (m *metaStore) hashCode(code string) string {
@@ -216,16 +224,30 @@ func safeRedirect(rd, host string) bool {
 	return u.Scheme == "https" && u.Host == host
 }
 
-// handlePolicy: PATCH/POST /api/site/<name>/policy. Auth con ID token Google; se
-// il sito è bloccato, solo l'owner.
-func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request) {
+// handleSiteAPI instrada /api/site/<name>[/policy]:
+//   - GET|POST|PATCH .../policy  -> handlePolicy (leggi/muta la policy)
+//   - DELETE /api/site/<name>    -> handleDelete (elimina il sito)
+func (s *server) handleSiteAPI(w http.ResponseWriter, r *http.Request) {
 	name, action, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/site/"), "/")
-	if action != "policy" || !quick.ValidName(name) {
+	if !quick.ValidName(name) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.Method != http.MethodPost && r.Method != http.MethodPatch {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+	switch {
+	case action == "policy":
+		s.handlePolicy(w, r, name)
+	case action == "" && r.Method == http.MethodDelete:
+		s.handleDelete(w, r, name)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// handlePolicy: GET legge la policy corrente, POST/PATCH la muta. Auth con ID
+// token Google; per le modifiche, se il sito è bloccato, solo l'owner.
+func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPatch {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	email, err := s.authenticate(r)
@@ -234,6 +256,10 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cur := s.meta.load(name)
+	if r.Method == http.MethodGet {
+		s.writePolicy(w, name, cur)
+		return
+	}
 	if cur.Locked && cur.Owner != "" && cur.Owner != email {
 		http.Error(w, "sito bloccato da "+cur.Owner, http.StatusForbidden)
 		return
@@ -271,13 +297,46 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	access := cur.Access
+	s.writePolicy(w, name, cur)
+}
+
+// writePolicy serializza lo stato corrente del sito (access normalizzato + esistenza).
+func (s *server) writePolicy(w http.ResponseWriter, name string, p policy) {
+	access := p.Access
 	if access == "" {
 		access = "sso"
 	}
+	exists, _ := s.store.SiteExists(name)
 	_ = json.NewEncoder(w).Encode(quick.PolicyResponse{
-		Site: name, Access: access, Locked: cur.Locked, Owner: cur.Owner,
+		Site: name, Access: access, Locked: p.Locked, Owner: p.Owner, Exists: exists,
 	})
+}
+
+// handleDelete: DELETE /api/site/<name>. Elimina contenuti e metadata del sito.
+// Auth con ID token Google; se il sito è bloccato, solo l'owner può eliminarlo.
+func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name string) {
+	email, err := s.authenticate(r)
+	if err != nil {
+		http.Error(w, "auth: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	cur := s.meta.load(name)
+	if cur.Locked && cur.Owner != "" && cur.Owner != email {
+		http.Error(w, "sito bloccato da "+cur.Owner, http.StatusForbidden)
+		return
+	}
+	existed, err := s.store.DeleteSite(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.meta.forget(name)
+	if !existed {
+		http.Error(w, "sito non trovato", http.StatusNotFound)
+		return
+	}
+	log.Printf("delete %q da %s", name, email)
+	_ = json.NewEncoder(w).Encode(quick.DeleteResponse{Site: name, Deleted: true})
 }
 
 var codeForm = template.Must(template.New("code").Parse(`<!doctype html>

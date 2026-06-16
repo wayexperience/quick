@@ -32,6 +32,10 @@ type Backend interface {
 	PutSite(site string, tr *tar.Reader) error
 	// OpenFile apre un singolo file del sito; ErrNotFound se non esiste/è dir.
 	OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error)
+	// DeleteSite rimuove contenuti e metadata del sito; existed=false se non c'era nulla.
+	DeleteSite(site string) (existed bool, err error)
+	// SiteExists indica se il sito ha contenuti o metadata.
+	SiteExists(site string) (bool, error)
 	// GetMeta restituisce il JSON di policy del sito (ok=false se assente).
 	GetMeta(site string) (data []byte, ok bool, err error)
 	// PutMeta salva il JSON di policy del sito.
@@ -159,6 +163,30 @@ func (l *local) OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error) {
 		return nil, FileInfo{}, ErrNotFound
 	}
 	return f, FileInfo{Name: filepath.Base(full), ModTime: st.ModTime()}, nil
+}
+
+func (l *local) DeleteSite(site string) (bool, error) {
+	existed, err := l.SiteExists(site)
+	if err != nil {
+		return false, err
+	}
+	if err := os.RemoveAll(filepath.Join(l.sitesDir, site)); err != nil {
+		return existed, err
+	}
+	if err := os.Remove(l.metaPath(site)); err != nil && !os.IsNotExist(err) {
+		return existed, err
+	}
+	return existed, nil
+}
+
+func (l *local) SiteExists(site string) (bool, error) {
+	if fi, err := os.Stat(filepath.Join(l.sitesDir, site)); err == nil {
+		return fi.IsDir(), nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	_, ok, err := l.GetMeta(site)
+	return ok, err
 }
 
 func (l *local) metaPath(site string) string { return filepath.Join(l.metaDir, site+".json") }

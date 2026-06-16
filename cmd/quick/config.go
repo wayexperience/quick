@@ -22,11 +22,25 @@ import (
 // promptServer chiede l'URL del server quando non è dato da flag/env/cache.
 func promptServer() string {
 	fmt.Fprint(os.Stderr, "URL del server quick (es. https://quick.example.com): ")
+	return readLine()
+}
+
+// readLine legge una riga da stdin (senza spazi ai bordi).
+func readLine() string {
 	sc := bufio.NewScanner(os.Stdin)
 	if sc.Scan() {
 		return strings.TrimSpace(sc.Text())
 	}
 	return ""
+}
+
+// yesNo interpreta una risposta affermativa (italiano o inglese).
+func yesNo(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "s", "si", "sì", "y", "yes":
+		return true
+	}
+	return false
 }
 
 type cliConfig struct {

@@ -123,6 +123,45 @@ func (s *s3) OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error) {
 	return obj, FileInfo{Name: path.Base(rel), ModTime: st.LastModified, ETag: st.ETag}, nil
 }
 
+func (s *s3) DeleteSite(site string) (bool, error) {
+	ctx := context.Background()
+	existed := false
+	for obj := range s.cli.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix: s.sitePrefix(site), Recursive: true,
+	}) {
+		if obj.Err != nil {
+			return existed, obj.Err
+		}
+		if err := s.cli.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{}); err != nil {
+			return existed, err
+		}
+		existed = true
+	}
+	if _, ok, _ := s.GetMeta(site); ok {
+		existed = true
+	}
+	if err := s.cli.RemoveObject(ctx, s.bucket, s.metaKey(site), minio.RemoveObjectOptions{}); err != nil {
+		return existed, err
+	}
+	return existed, nil
+}
+
+func (s *s3) SiteExists(site string) (bool, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := s.cli.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix: s.sitePrefix(site), Recursive: true, MaxKeys: 1,
+	})
+	if obj, ok := <-ch; ok {
+		if obj.Err != nil {
+			return false, obj.Err
+		}
+		return true, nil
+	}
+	_, ok, err := s.GetMeta(site)
+	return ok, err
+}
+
 func (s *s3) GetMeta(site string) ([]byte, bool, error) {
 	ctx := context.Background()
 	obj, err := s.cli.GetObject(ctx, s.bucket, s.metaKey(site), minio.GetObjectOptions{})
