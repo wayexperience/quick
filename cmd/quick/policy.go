@@ -38,8 +38,12 @@ func policyCmd(action string, args []string) {
 	}
 	fs.Parse(args)
 
+	sf := loadSiteFile(".")
+	if name == "" && sf != nil {
+		name = sf.Name
+	}
 	if name == "" {
-		fatal(errors.New("manca il nome del sito"))
+		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
 	}
 
 	payload := quick.PolicyRequest{}
@@ -59,7 +63,11 @@ func policyCmd(action string, args []string) {
 		payload.Locked = new(false)
 	}
 
-	cfg, err := resolveConfig(*server)
+	srv := *server
+	if srv == "" && sf != nil {
+		srv = sf.Server
+	}
+	cfg, err := resolveConfig(srv)
 	fatal(err)
 
 	tok := *token

@@ -22,10 +22,17 @@ quick login                                     # login Google nel browser
 quick deploy ./ilmiosito --name foo             # -> https://foo.quick.example.com
 ```
 
-Senza `--name` usa il nome della cartella. Il deploy carica l'intera cartella e
-sovrascrive il sito (i file rimossi spariscono). Sottodomini nuovi sono istantanei
-(il wildcard copre già il certificato). La CLI si auto-configura: da `--server`
-(o `QUICK_SERVER`) chiede a `GET <server>/api/config` client OAuth e domini.
+Senza `--name` usa il nome della cartella. Il deploy carica la cartella e
+sovrascrive il sito (i file rimossi spariscono). I file/cartelle nascosti
+(`.git`, `.DS_Store`, `.env`, …) sono **esclusi** — tranne `.well-known`.
+Sottodomini nuovi sono istantanei (il wildcard copre già il certificato).
+
+Al primo deploy viene scritto un file **`.quick`** nella cartella (nome del sito +
+server), così dalla cartella puoi ripetere senza parametri: `quick deploy`,
+`quick publish`, ecc. (`.quick` non viene caricato.)
+
+Il server si dà come dominio nudo (`quick.example.com`) o URL completo; la CLI
+aggiunge `https://`, prova anche `deploy.<dominio>`, e ricorda quello che risponde.
 
 ## Visibilità e lock
 

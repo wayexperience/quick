@@ -115,6 +115,10 @@ func deploy(args []string) {
 		fatal(fmt.Errorf("--public e --private sono mutuamente esclusivi"))
 	}
 
+	sf := loadSiteFile(dir)
+	if *name == "" && sf != nil {
+		*name = sf.Name
+	}
 	if *name == "" {
 		abs, _ := filepath.Abs(dir)
 		*name = filepath.Base(abs)
@@ -126,7 +130,11 @@ func deploy(args []string) {
 		fatal(fmt.Errorf("%q non è una cartella", dir))
 	}
 
-	cfg, err := resolveConfig(*server)
+	srv := *server
+	if srv == "" && sf != nil {
+		srv = sf.Server
+	}
+	cfg, err := resolveConfig(srv)
 	fatal(err)
 
 	tok := *token
@@ -157,6 +165,7 @@ func deploy(args []string) {
 	var res quick.DeployResponse
 	json.Unmarshal(respBody, &res)
 	fmt.Printf("✓ %s pubblicato → %s\n", *name, res.URL)
+	saveSiteFile(dir, siteFile{Name: *name, Server: cfg.Server})
 
 	// Visibilità opzionale applicata subito dopo il deploy.
 	switch {
@@ -189,6 +198,16 @@ func tarGz(dir string) (*bytes.Buffer, error) {
 		}
 		if rel == "." {
 			return nil
+		}
+		// Salta i file/cartelle nascosti (.git, .DS_Store, .env, .quick…),
+		// tranne .well-known che è contenuto web legittimo.
+		for part := range strings.SplitSeq(filepath.ToSlash(rel), "/") {
+			if strings.HasPrefix(part, ".") && part != ".well-known" {
+				if fi.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 		hdr, err := tar.FileInfoHeader(fi, "")
 		if err != nil {

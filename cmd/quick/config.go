@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -85,12 +86,8 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 
 	cands := candidates(server)
 	// se un candidato coincide col server già salvato, riuso la cache
-	if saved != nil && saved.OAuthClientID != "" {
-		for _, c := range cands {
-			if c == saved.Server {
-				return saved, nil
-			}
-		}
+	if saved != nil && saved.OAuthClientID != "" && slices.Contains(cands, saved.Server) {
+		return saved, nil
 	}
 	// provo i candidati finché /api/config risponde (es. apex -> deploy.<dominio>)
 	var lastErr error
@@ -112,8 +109,8 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 func candidates(input string) []string {
 	input = strings.TrimRight(strings.TrimSpace(input), "/")
 	host := input
-	if i := strings.Index(input, "://"); i >= 0 {
-		host = input[i+3:]
+	if _, after, ok := strings.Cut(input, "://"); ok {
+		host = after
 	}
 	first := input
 	if !strings.Contains(first, "://") {
