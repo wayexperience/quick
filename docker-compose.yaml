@@ -39,11 +39,13 @@ services:
     # docker compose dall'env della risorsa; {env.CF_API_TOKEN} e {{upstreams}}
     # restano per Caddy. caddy_ingress_network=coolify: rete su cui il proxy
     # raggiunge il container.
+    # Forma LISTA (non mappa): i valori con {{...}}/*. restano stringhe e non
+    # vengono interpretati come YAML quando Coolify ri-serializza le label.
     labels:
-      caddy: "*.${QUICK_BASE_DOMAIN}"
-      caddy.tls.dns: "cloudflare {env.CF_API_TOKEN}"
-      caddy.reverse_proxy: "{{upstreams 8080}}"
-      caddy_ingress_network: coolify
+      - "caddy=*.${QUICK_BASE_DOMAIN}"
+      - "caddy.tls.dns=cloudflare {env.CF_API_TOKEN}"
+      - "caddy.reverse_proxy={{upstreams 8080}}"
+      - "caddy_ingress_network=coolify"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
       interval: 15s
