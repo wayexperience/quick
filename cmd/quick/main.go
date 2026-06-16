@@ -135,13 +135,8 @@ func deploy(args []string) {
 
 	// Se la cartella è già collegata a un altro sito (.quick), avvisa prima di
 	// fare deploy altrove: facile da innescare con --name sbagliato.
-	if sf != nil && sf.Name != "" && sf.Name != *name {
-		fmt.Fprintf(os.Stderr, "⚠️  questa cartella è collegata al sito %q (.quick), ma stai per fare deploy su %q.\n", sf.Name, *name)
-		fmt.Fprint(os.Stderr, "Procedo lo stesso? [s/N]: ")
-		if !yesNo(readLine()) {
-			fmt.Fprintln(os.Stderr, "annullato")
-			return
-		}
+	if !confirmSiteMismatch(sf, *name, "fare deploy su") {
+		return
 	}
 
 	srv := *server

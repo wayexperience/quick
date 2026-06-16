@@ -45,6 +45,9 @@ func policyCmd(action string, args []string) {
 	if name == "" {
 		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
 	}
+	if !confirmSiteMismatch(sf, name, "modificare") {
+		return
+	}
 
 	payload := quick.PolicyRequest{}
 	switch action {

@@ -36,6 +36,9 @@ func deleteCmd(args []string) {
 	if name == "" {
 		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
 	}
+	if !confirmSiteMismatch(sf, name, "eliminare") {
+		return
+	}
 
 	srv := *server
 	if srv == "" && sf != nil {
