@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"quick/internal/quick"
+	"github.com/wayexperience/quick/internal/quick"
 )
 
 type cliConfig struct {

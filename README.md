@@ -8,6 +8,12 @@ aprirlo al pubblico o proteggerlo con un codice, e bloccarne la sovrascrittura.
 Tutto è configurabile da variabili d'ambiente: nessun dominio o credenziale è
 cablato nel codice. Lo storage può essere locale o object storage S3-compatibile.
 
+## Installare la CLI
+
+```bash
+go install github.com/wayexperience/quick/cmd/quick@latest   # finisce in $(go env GOBIN)
+```
+
 ## Pubblicare un sito
 
 ```bash

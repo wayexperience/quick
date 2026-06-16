@@ -23,7 +23,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"quick/internal/quick"
+	"github.com/wayexperience/quick/internal/quick"
 )
 
 // version è sovrascrivibile a build time con -ldflags "-X main.version=...".
@@ -80,6 +80,7 @@ func printVersion() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, `uso (server via --server o QUICK_SERVER):
+  quick version
   quick login
   quick deploy [cartella] --name <sito>
   quick publish   <sito>            # apri al pubblico (niente SSO)

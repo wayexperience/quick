@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"quick/internal/quick"
-	"quick/internal/storage"
+	"github.com/wayexperience/quick/internal/quick"
+	"github.com/wayexperience/quick/internal/storage"
 )
 
 // handleConfig espone (pubblicamente) ciò che serve alla CLI per auto-configurarsi:

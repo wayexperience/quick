@@ -20,7 +20,7 @@ import (
 	"os"
 	"strings"
 
-	"quick/internal/quick"
+	"github.com/wayexperience/quick/internal/quick"
 )
 
 func policyCmd(action string, args []string) {
