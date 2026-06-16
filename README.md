@@ -49,10 +49,13 @@ la CLI. `SKILL.md` è un formato aperto cross-vendor (Claude Code, Codex, Gemini
 Cursor…): default `~/.claude/skills/quick/`, oppure `--target codex|gemini|…`,
 `--project` (cartella del repo), `--all` (tutti gli agenti noti).
 
-Al primo deploy viene scritto un file **`.quick`** nella cartella (nome del sito +
-server), così dalla cartella puoi ripetere senza parametri: `quick deploy`,
-`quick publish`, ecc. (`.quick` non viene caricato.) Se provi a fare deploy su un
-sito diverso da quello collegato, la CLI te lo segnala e chiede conferma.
+Al primo deploy viene scritto un file **`.quick`** nella **cartella corrente** (nome
+del sito, server e la sottocartella pubblicata), così da lì puoi ripetere senza
+parametri: `quick deploy`, `quick publish`, ecc. Esempio: `quick deploy foo ./build`
+scrive `.quick` con `dir: build`, quindi un `quick deploy` nudo dalla stessa cartella
+ripubblica `./build` su `foo` — anche se `build` viene rigenerata ogni volta.
+(`.quick` non viene caricato.) Se provi a fare deploy su un sito diverso da quello
+collegato, la CLI te lo segnala e chiede conferma.
 
 Il server si dà come dominio nudo (`quick.example.com`) o URL completo; la CLI
 aggiunge `https://`, prova anche `deploy.<dominio>`, e ricorda quello che risponde.

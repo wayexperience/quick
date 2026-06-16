@@ -168,13 +168,20 @@ func deploy(args []string) {
 		fatal(fmt.Errorf("--public e --private sono mutuamente esclusivi"))
 	}
 
+	// .quick vive nella cartella corrente (come per publish/private/delete), non
+	// in quella deployata: la radice del progetto è stabile, ./build è effimero.
+	sf := loadSiteFile(".")
+
+	// Cartella da pubblicare: posizionale > dir ricordato nel .quick > corrente.
 	dir := "."
-	if posDir != "" {
+	switch {
+	case posDir != "":
 		dir = posDir
+	case sf != nil && sf.Dir != "":
+		dir = sf.Dir
 	}
 
 	// Nome sito: posizionale > .quick > nome della cartella.
-	sf := loadSiteFile(dir)
 	siteName := posSite
 	if siteName == "" && sf != nil {
 		siteName = sf.Name
@@ -256,7 +263,11 @@ func deploy(args []string) {
 	var res quick.DeployResponse
 	json.Unmarshal(respBody, &res)
 	fmt.Printf("✓ %s pubblicato → %s\n", *name, res.URL)
-	saveSiteFile(dir, siteFile{Name: *name, Server: cfg.Server})
+	relDir := filepath.ToSlash(filepath.Clean(dir))
+	if relDir == "." {
+		relDir = ""
+	}
+	saveSiteFile(".", siteFile{Name: *name, Server: cfg.Server, Dir: relDir})
 
 	// Visibilità opzionale applicata subito dopo il deploy.
 	switch {

@@ -20,8 +20,13 @@ func statusCmd(args []string) {
 	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
 	fs.Parse(args)
 
+	sf := loadSiteFile(".")
+	// Stessa risoluzione del deploy: la cartella pubblicata è quella ricordata
+	// nel .quick (o la corrente).
 	dir := "."
-	sf := loadSiteFile(dir)
+	if sf != nil && sf.Dir != "" {
+		dir = sf.Dir
+	}
 	name := ""
 	if sf != nil {
 		name = sf.Name
@@ -62,9 +67,13 @@ func statusCmd(args []string) {
 		}
 	}
 
-	// Cosa salirebbe col deploy dalla cartella corrente.
+	// Cosa salirebbe col deploy (dalla cartella ricordata o dalla corrente).
 	if pl, err := buildPlan(dir); err == nil {
-		fmt.Printf("Deploy:  %d file, %s (esclusioni: %s", len(pl.files), humanSize(pl.totalSize), pl.ignoreSource())
+		from := ""
+		if dir != "." {
+			from = " da ./" + filepath.ToSlash(dir)
+		}
+		fmt.Printf("Deploy:  %d file, %s%s (esclusioni: %s", len(pl.files), humanSize(pl.totalSize), from, pl.ignoreSource())
 		if pl.excluded > 0 {
 			fmt.Printf(", %d esclusi", pl.excluded)
 		}

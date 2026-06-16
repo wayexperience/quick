@@ -1,6 +1,7 @@
-// .quick: file di progetto scritto nella cartella al primo deploy, con il minimo
-// per ripetere i comandi senza parametri (nome del sito, server). NON viene
-// caricato nel deploy (escluso dal tarball), quindi non finisce servito sul sito.
+// .quick: file di progetto scritto nella cartella corrente al primo deploy, col
+// minimo per ripetere i comandi senza parametri (nome del sito, server e la
+// sottocartella pubblicata). NON viene caricato nel deploy (escluso dal tarball,
+// è un dotfile), quindi non finisce servito sul sito.
 package main
 
 import (
@@ -15,6 +16,7 @@ const siteFileName = ".quick"
 type siteFile struct {
 	Name   string `json:"name"`
 	Server string `json:"server,omitempty"`
+	Dir    string `json:"dir,omitempty"` // sottocartella da pubblicare (relativa); vuoto = "."
 }
 
 func loadSiteFile(dir string) *siteFile {
