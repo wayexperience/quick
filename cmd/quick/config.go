@@ -117,24 +117,15 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 	return nil, fmt.Errorf("server non raggiungibile (provati: %s): %w", strings.Join(cands, ", "), lastErr)
 }
 
-// candidates espande un input (anche solo un dominio, es. "quick.way.srl") negli
-// URL da provare per /api/config: aggiunge https:// se manca, e prova anche
-// deploy.<dominio> come fallback (l'apex di un wildcard non è instradato).
+// candidates normalizza l'input del server: accetta un dominio nudo
+// ("quick.way.srl") o un URL completo, e aggiunge https:// se manca. Tutte le
+// API e l'auth vivono sull'apex, quindi non c'è più alcun fallback su deploy.<dominio>.
 func candidates(input string) []string {
 	input = strings.TrimRight(strings.TrimSpace(input), "/")
-	host := input
-	if _, after, ok := strings.Cut(input, "://"); ok {
-		host = after
+	if !strings.Contains(input, "://") {
+		input = "https://" + input
 	}
-	first := input
-	if !strings.Contains(first, "://") {
-		first = "https://" + first
-	}
-	out := []string{first}
-	if !strings.Contains(host, "/") && !strings.HasPrefix(host, "deploy.") {
-		out = append(out, "https://deploy."+host)
-	}
-	return out
+	return []string{input}
 }
 
 func fetchConfig(server string) (*cliConfig, error) {

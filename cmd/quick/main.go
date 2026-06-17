@@ -60,6 +60,8 @@ func main() {
 		fmt.Println("✓ login eseguito")
 	case "deploy":
 		deploy(os.Args[2:])
+	case "rollback":
+		rollbackCmd(os.Args[2:])
 	case "delete", "rm":
 		deleteCmd(os.Args[2:])
 	case "publish", "unpublish", "private", "lock", "unlock":
@@ -99,6 +101,7 @@ func printUsage(w io.Writer) {
   quick status                      # stato: server, sito, visibilità, deploy
   quick login                       # accesso Google (una volta)
   quick deploy [<sito>] [cartella]  # pubblica una cartella (default: corrente)
+  quick rollback  <sito>            # ripristina la versione precedente
   quick ignore  [cartella]          # crea un .quickignore modificabile
   quick skill   [--target codex|gemini|…] [--project] [--all]  # pubblica la Agent Skill (SKILL.md)
   quick delete    <sito>            # elimina il sito (irreversibile)
@@ -229,17 +232,33 @@ func deploy(args []string) {
 	cfg, err := resolveConfig(srv)
 	fatal(err)
 
-	// Riepilogo + conferma: sostituire l'intero sito è un'operazione distruttiva.
-	if !confirmDeploy(*name, cfg, pl, *yes) {
-		fmt.Fprintln(os.Stderr, "annullato")
-		return
-	}
-
+	// Autenticazione subito: serve l'identità per la conferma "ultimo deploy".
 	tok := *token
 	if tok == "" {
 		if tok, err = idToken(cfg); err != nil {
 			fatal(err)
 		}
+	}
+	me := emailFromToken(tok)
+	if me != "" {
+		fmt.Printf("%s Autenticato come %s\n", check(), cCyan(localPart(me)))
+	}
+
+	// Conferma rinforzata se l'ultimo deploy non era tuo (stile Shopify): ridigita
+	// il nome prima di sovrascrivere il lavoro di un'altra persona.
+	if !*yes {
+		if pol, ok := getPolicy(cfg, *name, tok); ok && pol.Exists && pol.UpdatedBy != "" && pol.UpdatedBy != me {
+			if !confirmOverwrite(*name, pol.UpdatedBy) {
+				fmt.Fprintln(os.Stderr, "annullato")
+				return
+			}
+		}
+	}
+
+	// Riepilogo + conferma: sostituire l'intero sito è un'operazione distruttiva.
+	if !confirmDeploy(*name, cfg, pl, *yes) {
+		fmt.Fprintln(os.Stderr, "annullato")
+		return
 	}
 
 	payload, err := tarGzFromPlan(dir, pl)
@@ -262,7 +281,7 @@ func deploy(args []string) {
 
 	var res quick.DeployResponse
 	json.Unmarshal(respBody, &res)
-	fmt.Printf("✓ %s pubblicato → %s\n", *name, res.URL)
+	fmt.Printf("%s %s pubblicato → %s\n", check(), cBold(*name), cCyan(res.URL))
 	relDir := filepath.ToSlash(filepath.Clean(dir))
 	if relDir == "." {
 		relDir = ""

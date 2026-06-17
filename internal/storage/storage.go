@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -28,7 +29,8 @@ type FileInfo struct {
 
 // Backend è l'astrazione di storage condivisa da contenuti siti e metadata.
 type Backend interface {
-	// PutSite rimpiazza l'intero albero del sito col contenuto del tar.
+	// PutSite rimpiazza l'intero albero del sito col contenuto del tar,
+	// conservando la versione precedente per un eventuale Rollback.
 	PutSite(site string, tr *tar.Reader) error
 	// OpenFile apre un singolo file del sito; ErrNotFound se non esiste/è dir.
 	OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error)
@@ -36,6 +38,11 @@ type Backend interface {
 	DeleteSite(site string) (existed bool, err error)
 	// SiteExists indica se il sito ha contenuti o metadata.
 	SiteExists(site string) (bool, error)
+	// ListSites elenca i nomi dei siti noti (contenuti o metadata).
+	ListSites() ([]string, error)
+	// Rollback riporta il sito alla versione precedente (l'ultimo deploy diventa
+	// la "prossima"). ok=false se non c'è una versione precedente da ripristinare.
+	Rollback(site string) (ok bool, err error)
 	// GetMeta restituisce il JSON di policy del sito (ok=false se assente).
 	GetMeta(site string) (data []byte, ok bool, err error)
 	// PutMeta salva il JSON di policy del sito.
@@ -133,18 +140,73 @@ func (l *local) PutSite(site string, tr *tar.Reader) error {
 	}
 
 	final := filepath.Join(l.sitesDir, site)
-	old := filepath.Join(l.sitesDir, "."+site+".old")
-	os.RemoveAll(old)
+	prev := l.prevPath(site)
 	if _, err := os.Stat(final); err == nil {
-		if err := os.Rename(final, old); err != nil {
+		// La versione attuale diventa la "precedente" (rollback a un livello):
+		// la penultima viene scartata.
+		os.RemoveAll(prev)
+		if err := os.Rename(final, prev); err != nil {
 			return err
 		}
 	}
 	if err := os.Rename(tmp, final); err != nil {
+		// ripristina la versione precedente se l'avevamo spostata
+		if _, e := os.Stat(prev); e == nil {
+			os.Rename(prev, final)
+		}
 		return err
 	}
-	os.RemoveAll(old)
 	return nil
+}
+
+func (l *local) prevPath(site string) string { return filepath.Join(l.sitesDir, "."+site+".prev") }
+
+func (l *local) ListSites() ([]string, error) {
+	set := map[string]bool{}
+	if ents, err := os.ReadDir(l.sitesDir); err == nil {
+		for _, e := range ents {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				set[e.Name()] = true
+			}
+		}
+	}
+	if ents, err := os.ReadDir(l.metaDir); err == nil {
+		for _, e := range ents {
+			if n := e.Name(); !e.IsDir() && strings.HasSuffix(n, ".json") {
+				set[strings.TrimSuffix(n, ".json")] = true
+			}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for n := range set {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (l *local) Rollback(site string) (bool, error) {
+	final := filepath.Join(l.sitesDir, site)
+	prev := l.prevPath(site)
+	if _, err := os.Stat(prev); err != nil {
+		return false, nil // niente versione precedente
+	}
+	swap := filepath.Join(l.sitesDir, "."+site+".swap")
+	os.RemoveAll(swap)
+	if _, err := os.Stat(final); err == nil {
+		if err := os.Rename(final, swap); err != nil {
+			return false, err
+		}
+	}
+	if err := os.Rename(prev, final); err != nil {
+		os.Rename(swap, final) // ripristina
+		return false, err
+	}
+	// L'ex-versione attuale diventa la nuova "precedente": un secondo rollback la rifà.
+	if _, err := os.Stat(swap); err == nil {
+		os.Rename(swap, prev)
+	}
+	return true, nil
 }
 
 func (l *local) OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error) {
@@ -173,6 +235,7 @@ func (l *local) DeleteSite(site string) (bool, error) {
 	if err := os.RemoveAll(filepath.Join(l.sitesDir, site)); err != nil {
 		return existed, err
 	}
+	os.RemoveAll(l.prevPath(site))
 	if err := os.Remove(l.metaPath(site)); err != nil && !os.IsNotExist(err) {
 		return existed, err
 	}

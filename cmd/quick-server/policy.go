@@ -26,12 +26,51 @@ import (
 // codeAccessTTL: durata del cookie di accesso a un sito con codice.
 const codeAccessTTL = 7 * 24 * time.Hour
 
-// policy è lo stato per-sito persistito (JSON) nello storage.
+// Azioni di scrittura soggette al controllo di ownership.
+const (
+	actDeploy = "deploy"
+	actDelete = "delete"
+	actPolicy = "policy"
+)
+
+// nowStamp è il formato dei timestamp salvati nei metadata.
+func nowStamp() string { return time.Now().UTC().Format(time.RFC3339) }
+
+// canWrite decide se email può eseguire action sul sito con metadata p, secondo
+// la modalità di ownership (QUICK_OWNERSHIP) e l'eventuale lock esplicito. Il
+// lock ha sempre la precedenza; poi:
+//
+//	free   (default) chiunque può tutto
+//	shared           chiunque può deploy; solo il creatore elimina/cambia visibilità
+//	owned            solo il creatore può tutto
+func (s *server) canWrite(p policy, email, action string) (bool, string) {
+	if p.Locked && p.Owner != "" && p.Owner != email {
+		return false, "sito bloccato da " + p.Owner
+	}
+	creatorOnly := false
+	switch s.ownership {
+	case "owned":
+		creatorOnly = true
+	case "shared":
+		creatorOnly = action != actDeploy
+	}
+	if creatorOnly && p.CreatedBy != "" && p.CreatedBy != email {
+		return false, "sito di " + p.CreatedBy + " (modalità " + s.ownership + ")"
+	}
+	return true, ""
+}
+
+// policy è lo stato per-sito persistito (JSON) nello storage: visibilità, lock e
+// tracciamento di chi/quando ha creato e aggiornato il sito.
 type policy struct {
-	Owner    string `json:"owner,omitempty"`     // owner (set da lock)
-	Locked   bool   `json:"locked,omitempty"`    // solo l'owner può deploy/policy
-	Access   string `json:"access,omitempty"`    // "" = SSO | "public" | "code"
-	CodeHash string `json:"code_hash,omitempty"` // HMAC del codice (mai in chiaro)
+	CreatedBy string `json:"created_by,omitempty"` // email del creatore (primo deploy)
+	CreatedAt string `json:"created_at,omitempty"` // RFC3339
+	UpdatedBy string `json:"updated_by,omitempty"` // email dell'ultimo deploy
+	UpdatedAt string `json:"updated_at,omitempty"` // RFC3339
+	Owner     string `json:"owner,omitempty"`      // owner del lock (set da lock)
+	Locked    bool   `json:"locked,omitempty"`     // solo l'owner può deploy/policy
+	Access    string `json:"access,omitempty"`     // "" = SSO | "public" | "code"
+	CodeHash  string `json:"code_hash,omitempty"`  // HMAC del codice (mai in chiaro)
 }
 
 type cachedPolicy struct {
@@ -146,6 +185,9 @@ func fwdHost(r *http.Request) string {
 // checkSSO interroga oauth2-proxy /oauth2/auth (202 = sessione valida) rigirando
 // il cookie della richiesta.
 func (s *server) checkSSO(r *http.Request) (string, bool) {
+	if s.noAuth {
+		return "dev@" + def(s.domain, "example.com"), true
+	}
 	req, err := http.NewRequest(http.MethodGet, s.oauth2URL+"/oauth2/auth", nil)
 	if err != nil {
 		return "", false
@@ -236,11 +278,43 @@ func (s *server) handleSiteAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case action == "policy":
 		s.handlePolicy(w, r, name)
+	case action == "rollback" && r.Method == http.MethodPost:
+		s.handleRollback(w, r, name)
 	case action == "" && r.Method == http.MethodDelete:
 		s.handleDelete(w, r, name)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// handleRollback riporta il sito alla versione precedente. Auth con ID token
+// Google; stessa regola di scrittura del deploy.
+func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name string) {
+	email, err := s.authenticate(r)
+	if err != nil {
+		http.Error(w, "auth: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	cur := s.meta.load(name)
+	if ok, reason := s.canWrite(cur, email, actDeploy); !ok {
+		http.Error(w, reason, http.StatusForbidden)
+		return
+	}
+	ok, err := s.store.Rollback(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "nessuna versione precedente da ripristinare", http.StatusNotFound)
+		return
+	}
+	cur.UpdatedBy, cur.UpdatedAt = email, nowStamp()
+	_ = s.meta.save(name, cur)
+	log.Printf("rollback %q da %s", name, email)
+	_ = json.NewEncoder(w).Encode(quick.RollbackResponse{
+		Site: name, RolledBack: true, URL: "https://" + name + "." + s.baseDomain,
+	})
 }
 
 // handlePolicy: GET legge la policy corrente, POST/PATCH la muta. Auth con ID
@@ -260,13 +334,19 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 		s.writePolicy(w, name, cur)
 		return
 	}
-	if cur.Locked && cur.Owner != "" && cur.Owner != email {
-		http.Error(w, "sito bloccato da "+cur.Owner, http.StatusForbidden)
+	if ok, reason := s.canWrite(cur, email, actPolicy); !ok {
+		http.Error(w, reason, http.StatusForbidden)
 		return
 	}
 	var req quick.PolicyRequest
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
 		http.Error(w, "json non valido", http.StatusBadRequest)
+		return
+	}
+	// Il lock si può cambiare solo se sei il creatore: impedisce di "rubare" un
+	// sito altrui bloccandolo a proprio nome (rilevante in modalità free).
+	if req.Locked != nil && cur.CreatedBy != "" && cur.CreatedBy != email {
+		http.Error(w, "solo il creatore ("+cur.CreatedBy+") può bloccare il sito", http.StatusForbidden)
 		return
 	}
 	if req.Access != nil {
@@ -309,6 +389,7 @@ func (s *server) writePolicy(w http.ResponseWriter, name string, p policy) {
 	exists, _ := s.store.SiteExists(name)
 	_ = json.NewEncoder(w).Encode(quick.PolicyResponse{
 		Site: name, Access: access, Locked: p.Locked, Owner: p.Owner, Exists: exists,
+		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	})
 }
 
@@ -321,8 +402,8 @@ func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name strin
 		return
 	}
 	cur := s.meta.load(name)
-	if cur.Locked && cur.Owner != "" && cur.Owner != email {
-		http.Error(w, "sito bloccato da "+cur.Owner, http.StatusForbidden)
+	if ok, reason := s.canWrite(cur, email, actDelete); !ok {
+		http.Error(w, reason, http.StatusForbidden)
 		return
 	}
 	existed, err := s.store.DeleteSite(name)

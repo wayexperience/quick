@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"github.com/wayexperience/quick/internal/quick"
 )
@@ -60,6 +61,12 @@ func statusCmd(args []string) {
 				fmt.Println("Stato:   non ancora pubblicato")
 			} else {
 				fmt.Printf("Stato:   %s\n", describeAccess(pol.Access))
+				if pol.CreatedBy != "" {
+					fmt.Printf("Creato:  %s%s\n", pol.CreatedBy, fmtWhen(pol.CreatedAt))
+				}
+				if pol.UpdatedBy != "" {
+					fmt.Printf("Ultimo:  %s%s\n", pol.UpdatedBy, fmtWhen(pol.UpdatedAt))
+				}
 				if pol.Locked {
 					fmt.Printf("Lock:    bloccato da %s\n", pol.Owner)
 				}
@@ -79,6 +86,17 @@ func statusCmd(args []string) {
 		}
 		fmt.Println(")")
 	}
+}
+
+// fmtWhen rende un timestamp RFC3339 come " (2006-01-02 15:04)", o "" se vuoto.
+func fmtWhen(ts string) string {
+	if ts == "" {
+		return ""
+	}
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		return " (" + t.Local().Format("2006-01-02 15:04") + ")"
+	}
+	return " (" + ts + ")"
 }
 
 // describeAccess traduce il valore di policy in una frase per l'utente.

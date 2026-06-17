@@ -247,3 +247,29 @@ func randState() string {
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+// emailFromToken legge la claim "email" dal payload di un ID token (JWT) senza
+// verificarne la firma: serve solo a mostrare/identificare chi sei localmente.
+func emailFromToken(idtok string) string {
+	parts := strings.Split(idtok, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	b, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Email string `json:"email"`
+	}
+	json.Unmarshal(b, &c)
+	return c.Email
+}
+
+// localPart è la parte prima della @ di un'email (per un'etichetta breve).
+func localPart(email string) string {
+	if i := strings.IndexByte(email, '@'); i > 0 {
+		return email[:i]
+	}
+	return email
+}

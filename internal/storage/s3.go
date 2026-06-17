@@ -7,10 +7,12 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"archive/tar"
@@ -160,6 +162,42 @@ func (s *s3) SiteExists(site string) (bool, error) {
 	}
 	_, ok, err := s.GetMeta(site)
 	return ok, err
+}
+
+func (s *s3) ListSites() ([]string, error) {
+	ctx := context.Background()
+	set := map[string]bool{}
+	sitesBase := s.prefix + "sites/"
+	for obj := range s.cli.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: sitesBase, Recursive: true}) {
+		if obj.Err != nil {
+			return nil, obj.Err
+		}
+		rest := strings.TrimPrefix(obj.Key, sitesBase)
+		if i := strings.IndexByte(rest, '/'); i > 0 {
+			set[rest[:i]] = true
+		}
+	}
+	metaBase := s.prefix + "meta/"
+	for obj := range s.cli.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: metaBase, Recursive: true}) {
+		if obj.Err != nil {
+			return nil, obj.Err
+		}
+		if n := strings.TrimSuffix(strings.TrimPrefix(obj.Key, metaBase), ".json"); n != "" {
+			set[n] = true
+		}
+	}
+	out := make([]string, 0, len(set))
+	for n := range set {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// Rollback non è supportato sull'object storage: niente rename atomico né copia
+// della versione precedente (vedi README, va fatto via versioning del bucket).
+func (s *s3) Rollback(site string) (bool, error) {
+	return false, errors.New("rollback non supportato su storage s3 (usa il versioning del bucket)")
 }
 
 func (s *s3) GetMeta(site string) ([]byte, bool, error) {

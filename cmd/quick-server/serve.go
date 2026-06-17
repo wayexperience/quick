@@ -22,7 +22,7 @@ func init() {
 func (s *server) handleSite(w http.ResponseWriter, r *http.Request) {
 	host := fwdHost(r)
 	sub := subOf(host, s.baseDomain)
-	if sub == "" || s.reserved[sub] {
+	if sub == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -36,9 +36,9 @@ func (s *server) handleSite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.redirect(w, r, host, "/__quick/code")
-	default: // SSO: delego a oauth2-proxy passandogli il cookie di sessione
+	default: // SSO: se non autenticato mostro la pagina di accesso (niente redirect secco)
 		if _, ok := s.checkSSO(r); !ok {
-			s.redirect(w, r, host, "/oauth2/sign_in")
+			s.renderSSOPage(w, r, host)
 			return
 		}
 		s.serveSite(w, r, sub)

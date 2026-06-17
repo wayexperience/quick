@@ -78,6 +78,33 @@ Google via oauth2-proxy. Il **lock** registra te (dalla tua identità Google) co
 owner: gli altri non possono più sovrascrivere né cambiare policy finché non fai
 `unlock`.
 
+Al deploy la CLI mostra **chi sei** (`Autenticato come …`) e, se l'ultima
+pubblicazione di quel sito è di un'altra persona, chiede di **ridigitare il nome
+del sito** prima di sovrascriverne il lavoro.
+
+## Annullare un deploy
+
+```bash
+quick rollback foo   # ripristina la versione precedente (un secondo rollback la rifà)
+```
+
+Ogni deploy conserva la versione precedente: `rollback` le scambia. Disponibile
+sullo storage locale; sull'object storage va gestito col versioning del bucket.
+
+## Chi può modificare un sito
+
+Di chi è un sito viene tracciato al primo deploy (creatore) e a ogni
+aggiornamento. La regola di chi può sovrascrivere/eliminare/cambiare visibilità
+è impostabile sul server con `QUICK_OWNERSHIP`:
+
+- `free` (default): chiunque, in azienda, può tutto.
+- `shared`: chiunque pubblica i contenuti, ma solo il creatore elimina o cambia
+  la visibilità.
+- `owned`: solo il creatore può intervenire sul sito.
+
+In più, il creatore può `quick lock` il suo sito per riservarne a sé la modifica
+in qualunque modalità (`quick unlock` per riaprirlo).
+
 ## Eliminare un sito
 
 ```bash
@@ -85,7 +112,7 @@ quick delete foo     # rimuove contenuti e metadata (irreversibile)
 ```
 
 L'eliminazione chiede conferma; se il sito è pubblico o protetto da codice devi
-ridigitarne il nome. Un sito bloccato lo può eliminare solo il suo owner.
+ridigitarne il nome.
 
 ## Roadmap (convenzioni static-host, next step)
 
@@ -101,26 +128,28 @@ Convenzioni "via file, zero config" non ancora implementate, in ordine di utilit
 
 Lato piattaforma e integrazione agenti:
 
-- **Tutti gli endpoint sul dominio nudo** (es. `quick.way.srl`): unificare `/api/*` e
-  i comandi sull'apex invece di passare da `deploy.<dominio>`.
 - **Endpoint `/mcp`**: esporre quick come server MCP (deploy, status, publish… come
   strumenti chiamabili da qualunque agente, non solo come documentazione). In Go ci
   sono SDK MCP ufficiali, quindi è la via naturale per le *azioni* cross-agent.
 
 ## Architettura
 
+L'**apex** (`<BASE_DOMAIN>`) è il control plane: API, autenticazione e una
+dashboard dei siti (dietro SSO). Ogni **sottodominio** è solo un sito.
+
 ```
-browser ──https──> coolify-proxy (caddy-docker-proxy, wildcard TLS via DNS-01)
-                     │  label su quick-server:  *.<BASE_DOMAIN> -> reverse_proxy quick-server:8080
+browser ──https──> coolify-proxy (caddy-docker-proxy, TLS apex + wildcard via DNS-01)
+                     │  label su quick-server:  <BASE_DOMAIN>, *.<BASE_DOMAIN> -> quick-server:8080
                      ▼
-                 quick-server (UNICO front, smista per path):
-                   /api/health|config|deploy|site/<n>/policy
-                   /oauth2/*   -> reverse proxy a oauth2-proxy (SSO Google)
-                   /__quick/*  -> pagina codice
-                   resto       -> policy (public/code/sso) + serve dallo Storage
+                 quick-server (smista per HOST):
+                   <BASE_DOMAIN> (apex):  /api/health|config|deploy|sites|site/<n>/{policy,rollback}
+                                          /oauth2/* -> oauth2-proxy (SSO Google, sign_in + callback)
+                                          /         -> dashboard (loggato) | pagina accesso (guest)
+                   <sub>.<BASE_DOMAIN>:   policy per-sito (public/code/sso) + serve dallo Storage
+                                          /__quick/code -> pagina codice; SSO -> pagina di accesso
                  Storage: local (bind mount) | S3-compatibile (stateless)
 
-CLI quick ── login Google PKCE (loopback) ──> ID token ──> POST /api/deploy | /api/site/.../policy
+CLI quick ── login Google PKCE (loopback) ──> ID token ──> POST <apex>/api/deploy | /api/site/.../…
 ```
 
 Il proxy fa solo `reverse_proxy` verso quick-server: niente `file_server` né file
@@ -144,7 +173,7 @@ same-origin, identità già risolta dall'SSO, storage astratto — ma non è imp
 
 Vedi `.env.example`. In sintesi: `QUICK_BASE_DOMAIN`, `QUICK_ALLOWED_DOMAINS` (uno, lista `a,b`, o `*`),
 `GOOGLE_CLIENT_ID/SECRET` (client OAuth **Web** per oauth2-proxy), `COOKIE_SECRET`,
-`QUICK_META_SECRET`, `QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
+`QUICK_META_SECRET`, `QUICK_OWNERSHIP`=`free|shared|owned`, `QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
 
 Client OAuth della CLI (`QUICK_CLI_CLIENT_ID` / `QUICK_CLI_CLIENT_SECRET`): due modi
 - **Desktop app** → imposta solo l'ID; la CLI usa PKCE senza secret.
@@ -161,6 +190,11 @@ Client OAuth della CLI (`QUICK_CLI_CLIENT_ID` / `QUICK_CLI_CLIENT_SECRET`): due 
 
 Il routing è tutto nelle label: cambiare contenuto o policy non richiede toccare il
 proxy. Il vecchio `quick.caddy` in `/dynamic` non serve più (va rimosso al cutover).
+
+La label `caddy` copre **apex + wildcard** nello stesso blocco (`<BASE_DOMAIN>,
+*.<BASE_DOMAIN>`), così l'apex serve il control plane. L'auth è sull'apex: nel
+client OAuth **Web** di Google il redirect URI è `https://<BASE_DOMAIN>/oauth2/callback`
+(non più un sottodominio `auth.`).
 
 ## Sviluppo locale
 

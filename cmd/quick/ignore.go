@@ -232,6 +232,20 @@ func confirmDeploy(name string, cfg *cliConfig, p *plan, yes bool) bool {
 	return yesNo(readLine())
 }
 
+// confirmOverwrite chiede di ridigitare il nome del sito quando l'ultimo deploy
+// è di un'altra persona, per non sovrascriverne il lavoro per sbaglio.
+func confirmOverwrite(name, lastBy string) bool {
+	fmt.Println()
+	fmt.Printf("%s Il sito %s è stato aggiornato l'ultima volta da %s\n",
+		cYellow("!"), cBold(cYellow("'"+name+"'")), cBold(localPart(lastBy)))
+	if !stdinIsTTY() {
+		fmt.Fprintln(os.Stderr, "rifiutato: non interattivo. Riesegui con --yes per confermare.")
+		return false
+	}
+	fmt.Printf("%s Digita %s per confermare la sovrascrittura: ", cGreen("?"), cBold("'"+name+"'"))
+	return readLine() == name
+}
+
 // humanSize formatta una dimensione in byte in modo leggibile.
 func humanSize(n int64) string {
 	const unit = 1024

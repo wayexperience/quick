@@ -25,6 +25,7 @@ services:
       QUICK_OAUTH_CLIENT_SECRET: ${QUICK_CLI_CLIENT_SECRET:-}  # vuoto per client Desktop/PKCE
       QUICK_OAUTH2_URL: http://oauth2-proxy:4180
       QUICK_META_SECRET: ${QUICK_META_SECRET}
+      QUICK_OWNERSHIP: ${QUICK_OWNERSHIP:-free}   # free | shared | owned
       QUICK_STORAGE: ${QUICK_STORAGE:-local}
       QUICK_SITES_DIR: /srv/quick
       QUICK_META_DIR: /srv/quick-meta
@@ -35,14 +36,15 @@ services:
       QUICK_S3_SECRET_KEY: ${QUICK_S3_SECRET_KEY:-}
       QUICK_S3_PREFIX: ${QUICK_S3_PREFIX:-}
       QUICK_S3_USE_SSL: ${QUICK_S3_USE_SSL:-true}
-    # Routing del wildcard: label esplicite. ${QUICK_BASE_DOMAIN} lo sostituisce
-    # docker compose dall'env della risorsa; {env.CF_API_TOKEN} e {{upstreams}}
-    # restano per Caddy. caddy_ingress_network=coolify: rete su cui il proxy
-    # raggiunge il container.
+    # Routing: label esplicite. Un solo blocco che copre l'APEX (il control plane:
+    # API, auth, dashboard) E il wildcard dei siti — quick-server smista per host.
+    # ${QUICK_BASE_DOMAIN} lo sostituisce docker compose dall'env della risorsa;
+    # {env.CF_API_TOKEN} e {{upstreams}} restano per Caddy. caddy_ingress_network=
+    # coolify: rete su cui il proxy raggiunge il container.
     # Forma LISTA (non mappa): i valori con {{...}}/*. restano stringhe e non
     # vengono interpretati come YAML quando Coolify ri-serializza le label.
     labels:
-      - "caddy=*.${QUICK_BASE_DOMAIN}"
+      - "caddy=${QUICK_BASE_DOMAIN}, *.${QUICK_BASE_DOMAIN}"
       - "caddy.tls.dns=cloudflare {env.CF_API_TOKEN}"
       - "caddy.reverse_proxy={{upstreams 8080}}"
       - "caddy_ingress_network=coolify"
@@ -79,7 +81,7 @@ services:
       OAUTH2_PROXY_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       OAUTH2_PROXY_COOKIE_SECRET: ${COOKIE_SECRET}
       OAUTH2_PROXY_EMAIL_DOMAINS: ${QUICK_ALLOWED_DOMAINS}
-      OAUTH2_PROXY_REDIRECT_URL: https://auth.${QUICK_BASE_DOMAIN}/oauth2/callback
+      OAUTH2_PROXY_REDIRECT_URL: https://${QUICK_BASE_DOMAIN}/oauth2/callback
       OAUTH2_PROXY_COOKIE_DOMAINS: .${QUICK_BASE_DOMAIN}
       OAUTH2_PROXY_WHITELIST_DOMAINS: .${QUICK_BASE_DOMAIN}
     networks:

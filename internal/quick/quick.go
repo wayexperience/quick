@@ -23,9 +23,6 @@ const (
 	AccessCode   = "code"
 )
 
-// DefaultReservedSubs sono i sottodomini che non sono siti servibili.
-var DefaultReservedSubs = []string{"deploy", "auth", "api"}
-
 // PolicyRequest è il body di PATCH/POST /api/site/<name>/policy.
 type PolicyRequest struct {
 	Access *string `json:"access,omitempty"` // "sso" | "public" | "code"
@@ -35,11 +32,40 @@ type PolicyRequest struct {
 
 // PolicyResponse è la risposta degli endpoint di policy (POST muta, GET legge).
 type PolicyResponse struct {
-	Site   string `json:"site"`
-	Access string `json:"access"`
-	Locked bool   `json:"locked"`
-	Owner  string `json:"owner"`
-	Exists bool   `json:"exists"` // il sito ha contenuti o metadata
+	Site      string `json:"site"`
+	Access    string `json:"access"`
+	Locked    bool   `json:"locked"`
+	Owner     string `json:"owner"`
+	Exists    bool   `json:"exists"` // il sito ha contenuti o metadata
+	CreatedBy string `json:"created_by,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"` // RFC3339
+	UpdatedBy string `json:"updated_by,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"` // RFC3339
+}
+
+// SiteInfo descrive un sito nella lista /api/sites (e nella dashboard).
+type SiteInfo struct {
+	Site      string `json:"site"`
+	URL       string `json:"url"`
+	Access    string `json:"access"`
+	Locked    bool   `json:"locked"`
+	Owner     string `json:"owner,omitempty"`
+	CreatedBy string `json:"created_by,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedBy string `json:"updated_by,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// SitesResponse è la risposta di GET /api/sites.
+type SitesResponse struct {
+	Sites []SiteInfo `json:"sites"`
+}
+
+// RollbackResponse è la risposta di POST /api/site/<name>/rollback.
+type RollbackResponse struct {
+	Site       string `json:"site"`
+	RolledBack bool   `json:"rolled_back"`
+	URL        string `json:"url,omitempty"`
 }
 
 // DeleteResponse è la risposta di DELETE /api/site/<name>.

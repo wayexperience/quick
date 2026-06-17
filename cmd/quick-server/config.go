@@ -37,15 +37,3 @@ func storageConfigFromEnv() storage.Config {
 		},
 	}
 }
-
-func reservedSet() map[string]bool {
-	list := quick.SplitList(os.Getenv("QUICK_RESERVED_SUBS"))
-	if len(list) == 0 {
-		list = quick.DefaultReservedSubs
-	}
-	m := make(map[string]bool, len(list))
-	for _, x := range list {
-		m[x] = true
-	}
-	return m
-}
