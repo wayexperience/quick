@@ -56,7 +56,8 @@ func (s *server) handleSites(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]quick.SiteInfo, 0, len(names))
 	for _, n := range names {
-		out = append(out, s.siteInfo(n, s.meta.load(n)))
+		p, _ := s.meta.load(n) // listing: best-effort, su errore policy vuota (solo display)
+		out = append(out, s.siteInfo(n, p))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(quick.SitesResponse{Sites: out})
@@ -90,7 +91,7 @@ func (s *server) renderDashboard(w http.ResponseWriter, email string) {
 	names, _ := s.store.ListSites()
 	rows := make([]dashRow, 0, len(names))
 	for _, n := range names {
-		p := s.meta.load(n)
+		p, _ := s.meta.load(n) // dashboard: best-effort, su errore policy vuota (solo display)
 		access := p.Access
 		if access == "" {
 			access = "sso"

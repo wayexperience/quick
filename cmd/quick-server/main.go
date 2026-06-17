@@ -15,6 +15,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zupolgec/quick/internal/quick"
@@ -22,6 +23,10 @@ import (
 )
 
 const maxUpload = 200 << 20 // 200 MiB per deploy
+
+// httpClient: chiamate verso Google (tokeninfo) e oauth2-proxy (checkSSO) con
+// timeout, così una dipendenza appesa non blocca la goroutine della richiesta.
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 type server struct {
 	store        storage.Backend
@@ -35,6 +40,31 @@ type server struct {
 	oauthProxy   *httputil.ReverseProxy
 	apexMux      *http.ServeMux // control plane sull'apex
 	noAuth       bool           // solo sviluppo locale
+	locks        keyedMutex     // serializza le scritture per-sito (single instance)
+}
+
+// keyedMutex serializza le operazioni per chiave (qui: nome sito), così il ciclo
+// load→modifica→save di deploy/policy/delete/rollback è atomico e due richieste
+// sullo stesso sito non si sovrascrivono a vicenda. Zero value pronto all'uso.
+type keyedMutex struct {
+	mu sync.Mutex
+	m  map[string]*sync.Mutex
+}
+
+// lock acquisisce il mutex della chiave e restituisce la funzione di rilascio.
+func (k *keyedMutex) lock(key string) func() {
+	k.mu.Lock()
+	if k.m == nil {
+		k.m = map[string]*sync.Mutex{}
+	}
+	mtx := k.m[key]
+	if mtx == nil {
+		mtx = &sync.Mutex{}
+		k.m[key] = mtx
+	}
+	k.mu.Unlock()
+	mtx.Lock()
+	return mtx.Unlock
 }
 
 func main() {
@@ -42,6 +72,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	metaSecret := os.Getenv("QUICK_META_SECRET")
 	s := &server{
 		store:        store,
 		baseDomain:   os.Getenv("QUICK_BASE_DOMAIN"),
@@ -52,7 +83,10 @@ func main() {
 		ownership:    parseOwnership(os.Getenv("QUICK_OWNERSHIP")),
 		noAuth:       os.Getenv("QUICK_DEV_NOAUTH") == "1",
 	}
-	s.meta = newMetaStore(store, []byte(quick.Env("QUICK_META_SECRET", "dev-insecure-secret")), 5*time.Second)
+	if err := s.validateConfig(metaSecret); err != nil {
+		log.Fatal(err)
+	}
+	s.meta = newMetaStore(store, []byte(metaSecret), 5*time.Second)
 	if err := s.setupOAuthProxy(); err != nil {
 		log.Fatal(err)
 	}
@@ -98,6 +132,34 @@ func (s *server) buildApexMux() *http.ServeMux {
 	return m
 }
 
+// validateConfig applica il fail-closed all'avvio: fuori dalla modalità di
+// sviluppo (QUICK_DEV_NOAUTH=1) le env critiche per la sicurezza devono essere
+// valorizzate, altrimenti l'auth fallirebbe in apertura (cookie dei siti protetti
+// forgiabili, qualsiasi account Google ammesso al deploy, audience non verificata).
+func (s *server) validateConfig(metaSecret string) error {
+	if s.noAuth {
+		log.Print("⚠ QUICK_DEV_NOAUTH=1: autenticazione disattivata, solo per sviluppo locale")
+		return nil
+	}
+	var missing []string
+	if metaSecret == "" {
+		missing = append(missing, "QUICK_META_SECRET (firma cookie e codici dei siti protetti)")
+	}
+	if strings.TrimSpace(s.domain) == "" {
+		missing = append(missing, `QUICK_ALLOWED_DOMAINS (dominio email ammesso; usa "*" per qualsiasi account Google)`)
+	}
+	if s.clientID == "" {
+		missing = append(missing, "QUICK_OAUTH_CLIENT_ID (audience dell'ID token di deploy)")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("configurazione insicura, env mancanti:\n  - %s\n(imposta QUICK_DEV_NOAUTH=1 solo per sviluppo locale)", strings.Join(missing, "\n  - "))
+	}
+	if strings.TrimSpace(s.domain) == "*" {
+		log.Print(`⚠ QUICK_ALLOWED_DOMAINS="*": qualsiasi account Google può fare deploy`)
+	}
+	return nil
+}
+
 // parseOwnership normalizza QUICK_OWNERSHIP; default "free".
 func parseOwnership(v string) string {
 	switch v {
@@ -129,7 +191,13 @@ func (s *server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nome sito non valido (usa a-z, 0-9, trattino)", http.StatusBadRequest)
 		return
 	}
-	cur := s.meta.load(name)
+	unlock := s.locks.lock(name)
+	defer unlock()
+	cur, err := s.meta.load(name)
+	if err != nil {
+		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	if ok, reason := s.canWrite(cur, email, actDeploy); !ok {
 		http.Error(w, reason, http.StatusForbidden)
 		return
@@ -150,7 +218,11 @@ func (s *server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		cur.CreatedBy, cur.CreatedAt = email, now
 	}
 	cur.UpdatedBy, cur.UpdatedAt = email, now
-	_ = s.meta.save(name, cur)
+	if err := s.meta.save(name, cur); err != nil {
+		log.Printf("ATTENZIONE: deploy %q applicato ma salvataggio metadata fallito: %v", name, err)
+		http.Error(w, "deploy applicato ma salvataggio stato fallito: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	log.Printf("deploy %q da %s", name, email)
 	_ = json.NewEncoder(w).Encode(quick.DeployResponse{
 		Site: name,
@@ -169,7 +241,7 @@ func (s *server) authenticate(r *http.Request) (string, error) {
 	if tok == "" {
 		return "", errors.New("token mancante")
 	}
-	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + tok)
+	resp, err := httpClient.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + tok)
 	if err != nil {
 		return "", err
 	}

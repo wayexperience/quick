@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -90,25 +91,36 @@ func newMetaStore(be storage.Backend, secret []byte, ttl time.Duration) *metaSto
 	return &metaStore{be: be, secret: secret, ttl: ttl, cache: map[string]cachedPolicy{}}
 }
 
-func (m *metaStore) load(site string) policy {
+// load restituisce la policy del sito. Distingue tre casi: metadata assenti
+// (policy vuota legittima, si cacha), metadata presenti e validi (si cachano),
+// errore di storage o JSON corrotto (errore propagato e NON cachato). I caller
+// sul path di scrittura/servizio devono trattare l'errore come fail-closed:
+// una policy vuota per errore farebbe sparire lock e proprietà (ownership bypass).
+func (m *metaStore) load(site string) (policy, error) {
 	if !quick.ValidName(site) {
-		return policy{}
+		return policy{}, nil
 	}
 	m.mu.Lock()
 	if c, ok := m.cache[site]; ok && time.Since(c.at) < m.ttl {
 		m.mu.Unlock()
-		return c.p
+		return c.p, nil
 	}
 	m.mu.Unlock()
 
+	b, ok, err := m.be.GetMeta(site)
+	if err != nil {
+		return policy{}, err
+	}
 	var p policy
-	if b, ok, err := m.be.GetMeta(site); ok && err == nil {
-		_ = json.Unmarshal(b, &p)
+	if ok {
+		if err := json.Unmarshal(b, &p); err != nil {
+			return policy{}, fmt.Errorf("metadata di %q illeggibili: %w", site, err)
+		}
 	}
 	m.mu.Lock()
 	m.cache[site] = cachedPolicy{p, time.Now()}
 	m.mu.Unlock()
-	return p
+	return p, nil
 }
 
 func (m *metaStore) save(site string, p policy) error {
@@ -195,7 +207,7 @@ func (s *server) checkSSO(r *http.Request) (string, bool) {
 	if c := r.Header.Get("Cookie"); c != "" {
 		req.Header.Set("Cookie", c)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", false
 	}
@@ -221,7 +233,11 @@ func (s *server) handleCodePage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p := s.meta.load(sub)
+	p, err := s.meta.load(sub)
+	if err != nil {
+		http.Error(w, "sito temporaneamente non disponibile", http.StatusServiceUnavailable)
+		return
+	}
 	if p.Access != "code" {
 		http.Redirect(w, r, "https://"+host+"/", http.StatusFound)
 		return
@@ -295,7 +311,13 @@ func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name str
 		http.Error(w, "auth: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	cur := s.meta.load(name)
+	unlock := s.locks.lock(name)
+	defer unlock()
+	cur, err := s.meta.load(name)
+	if err != nil {
+		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	if ok, reason := s.canWrite(cur, email, actDeploy); !ok {
 		http.Error(w, reason, http.StatusForbidden)
 		return
@@ -310,7 +332,11 @@ func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	cur.UpdatedBy, cur.UpdatedAt = email, nowStamp()
-	_ = s.meta.save(name, cur)
+	if err := s.meta.save(name, cur); err != nil {
+		log.Printf("ATTENZIONE: rollback %q applicato ma salvataggio metadata fallito: %v", name, err)
+		http.Error(w, "rollback applicato ma salvataggio stato fallito: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	log.Printf("rollback %q da %s", name, email)
 	_ = json.NewEncoder(w).Encode(quick.RollbackResponse{
 		Site: name, RolledBack: true, URL: "https://" + name + "." + s.baseDomain,
@@ -329,7 +355,13 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 		http.Error(w, "auth: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	cur := s.meta.load(name)
+	unlock := s.locks.lock(name)
+	defer unlock()
+	cur, err := s.meta.load(name)
+	if err != nil {
+		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	if r.Method == http.MethodGet {
 		s.writePolicy(w, name, cur)
 		return
@@ -401,7 +433,13 @@ func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name strin
 		http.Error(w, "auth: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	cur := s.meta.load(name)
+	unlock := s.locks.lock(name)
+	defer unlock()
+	cur, err := s.meta.load(name)
+	if err != nil {
+		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	if ok, reason := s.canWrite(cur, email, actDelete); !ok {
 		http.Error(w, reason, http.StatusForbidden)
 		return

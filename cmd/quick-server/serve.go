@@ -26,7 +26,11 @@ func (s *server) handleSite(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p := s.meta.load(sub)
+	p, err := s.meta.load(sub)
+	if err != nil {
+		http.Error(w, "sito temporaneamente non disponibile", http.StatusServiceUnavailable)
+		return
+	}
 	switch p.Access {
 	case "public":
 		s.serveSite(w, r, sub)
