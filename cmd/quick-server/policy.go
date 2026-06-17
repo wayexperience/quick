@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wayexperience/quick/internal/quick"
-	"github.com/wayexperience/quick/internal/storage"
+	"github.com/zupolgec/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/storage"
 )
 
 // codeAccessTTL: durata del cookie di accesso a un sito con codice.

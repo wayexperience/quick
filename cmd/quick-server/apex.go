@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/wayexperience/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/quick"
 )
 
 // renderSSOPage mostra la pagina di accesso (niente redirect secco): branding +
@@ -215,6 +215,6 @@ code{background:var(--bg);border:1px solid var(--border);border-radius:6px;paddi
 
   <div class="help">
     Pubblica una cartella: <code>quick deploy &lt;nome&gt; ./cartella</code> → <code>&lt;nome&gt;.{{.Base}}</code>.
-    Installa la CLI con <code>go install github.com/wayexperience/quick/cmd/quick@latest</code>.
+    Installa la CLI con <code>go install github.com/zupolgec/quick/cmd/quick@latest</code>.
   </div>
 </div></body></html>`))

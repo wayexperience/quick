@@ -23,7 +23,7 @@ irm https://<il-tuo-dominio>/install.ps1 | iex
 Oppure, se hai Go:
 
 ```bash
-go install github.com/wayexperience/quick/cmd/quick@latest   # finisce in $(go env GOBIN)
+go install github.com/zupolgec/quick/cmd/quick@latest   # finisce in $(go env GOBIN)
 ```
 
 ## Pubblicare un sito

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/wayexperience/quick/internal/storage"
+	"github.com/zupolgec/quick/internal/storage"
 )
 
 // putSite carica un sito nello storage a partire da una mappa path->contenuto.

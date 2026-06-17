@@ -1,4 +1,4 @@
-// quick è la CLI di way-quick (hosting statico interno, generico).
+// quick è la CLI di quick: hosting statico self-hostable con SSO.
 //
 //	quick                                         # panoramica + help
 //	quick status                                  # stato: server, sito, visibilità, deploy
@@ -26,7 +26,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/wayexperience/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/quick"
 )
 
 // version è sovrascrivibile a build time con -ldflags "-X main.version=...".

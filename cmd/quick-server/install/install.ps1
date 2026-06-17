@@ -4,7 +4,7 @@
 #   irm https://<dominio>/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 
-$repo = "wayexperience/quick"
+$repo = "zupolgec/quick"
 
 $arch = "amd64"
 if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { $arch = "arm64" }

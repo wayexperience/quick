@@ -1,4 +1,4 @@
-module github.com/wayexperience/quick
+module github.com/zupolgec/quick
 
 go 1.26
 

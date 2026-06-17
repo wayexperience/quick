@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wayexperience/quick/internal/quick"
-	"github.com/wayexperience/quick/internal/storage"
+	"github.com/zupolgec/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/storage"
 )
 
 const maxUpload = 200 << 20 // 200 MiB per deploy

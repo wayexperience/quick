@@ -29,5 +29,5 @@ checksum:
 
 release:
   github:
-    owner: wayexperience
+    owner: zupolgec
     name: quick

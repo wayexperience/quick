@@ -7,7 +7,7 @@
 # Variabili: QUICK_INSTALL_DIR (default ~/.local/bin).
 set -e
 
-repo="wayexperience/quick"
+repo="zupolgec/quick"
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)

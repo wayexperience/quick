@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/wayexperience/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/quick"
 )
 
 func statusCmd(args []string) {

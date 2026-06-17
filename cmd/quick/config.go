@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wayexperience/quick/internal/quick"
+	"github.com/zupolgec/quick/internal/quick"
 )
 
 // promptServer chiede l'URL del server quando non è dato da flag/env/cache.
