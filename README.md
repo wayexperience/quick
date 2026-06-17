@@ -195,7 +195,9 @@ Client OAuth della CLI (`QUICK_CLI_CLIENT_ID` / `QUICK_CLI_CLIENT_SECRET`): due 
 
 ## Deploy su Coolify (4.1.x)
 
-1. Crea una risorsa **Docker Compose** dal repo git (Coolify builda `quick-server`).
+1. Crea una risorsa **Docker Compose** dal repo git (Coolify builda `quick-server`),
+   oppure usa l'immagine già pubblicata `image: ghcr.io/zupolgec/quick-server:latest`
+   (versionata a ogni release, multi-arch) invece di `build: .`.
 2. Imposta env/secrets (vedi sopra) e, se `QUICK_STORAGE=local`, i due bind mount.
 3. **Connect to Predefined Network → coolify** (così il proxy raggiunge il container).
 4. `CF_API_TOKEN` deve essere nell'env del proxy (lo usa la label `caddy.tls.dns`).
@@ -217,3 +219,7 @@ QUICK_DEV_NOAUTH=1 QUICK_BASE_DOMAIN=quick.localhost \
 ```
 `QUICK_DEV_NOAUTH=1` salta la verifica del token (solo locale). Per lo storage S3 si
 testa con un MinIO in Docker (vedi `QUICK_S3_*`).
+
+## Licenza
+
+MIT — vedi [LICENSE](LICENSE).
