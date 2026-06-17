@@ -191,6 +191,11 @@ Vedi `.env.example`. In sintesi: `QUICK_BASE_DOMAIN`, `QUICK_ALLOWED_DOMAINS` (u
 `GOOGLE_CLIENT_ID/SECRET` (client OAuth **Web** per oauth2-proxy), `COOKIE_SECRET`,
 `QUICK_META_SECRET`, `QUICK_OWNERSHIP`=`free|shared|owned`, `QUICK_STORAGE`=`local|s3` (+ `QUICK_S3_*`).
 
+Fail-closed: in produzione `QUICK_META_SECRET`, `QUICK_ALLOWED_DOMAINS` e `QUICK_OAUTH_CLIENT_ID`
+sono obbligatorie. Se ne manca una il server non parte (niente default insicuro, niente
+account ammessi a sorpresa). Per ammettere qualsiasi account Google usa `*` esplicito. Solo
+in sviluppo locale `QUICK_DEV_NOAUTH=1` salta questi controlli.
+
 Client OAuth della CLI (`QUICK_CLI_CLIENT_ID` / `QUICK_CLI_CLIENT_SECRET`): due modi
 - **Desktop app** → imposta solo l'ID; la CLI usa PKCE senza secret.
 - **riuso di un client Web** (anche lo stesso di oauth2-proxy) → imposta ID + secret;

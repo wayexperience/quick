@@ -26,7 +26,9 @@ services:
       QUICK_OAUTH_CLIENT_ID: ${QUICK_CLI_CLIENT_ID}
       QUICK_OAUTH_CLIENT_SECRET: ${QUICK_CLI_CLIENT_SECRET:-}  # vuoto per client Desktop/PKCE
       QUICK_OAUTH2_URL: http://oauth2-proxy:4180
-      QUICK_META_SECRET: ${QUICK_META_SECRET}
+      # Auto-generato e persistito da Coolify (magic var SERVICE_BASE64_*). Se vuoto
+      # quick-server NON parte: nessun default insicuro. Fuori Coolify, valorizzalo a mano.
+      QUICK_META_SECRET: ${SERVICE_BASE64_64_QUICKMETA}
       QUICK_OWNERSHIP: ${QUICK_OWNERSHIP:-free}   # free | shared | owned
       QUICK_STORAGE: ${QUICK_STORAGE:-local}
       QUICK_SITES_DIR: /srv/quick
