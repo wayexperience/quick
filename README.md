@@ -26,6 +26,10 @@ Oppure, se hai Go:
 go install github.com/zupolgec/quick/cmd/quick@latest   # finisce in $(go env GOBIN)
 ```
 
+Per aggiornare: `quick upgrade` (scarica e rimpiazza il binario con l'ultima
+release; `quick upgrade --check` controlla soltanto). Chi ha installato con Go usa
+di nuovo `go install …@latest`.
+
 ## Pubblicare un sito
 
 ```bash

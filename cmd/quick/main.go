@@ -62,6 +62,8 @@ func main() {
 		deploy(os.Args[2:])
 	case "rollback":
 		rollbackCmd(os.Args[2:])
+	case "upgrade", "self-update":
+		upgradeCmd(os.Args[2:])
 	case "delete", "rm":
 		deleteCmd(os.Args[2:])
 	case "publish", "unpublish", "private", "lock", "unlock":
@@ -110,6 +112,7 @@ func printUsage(w io.Writer) {
   quick private   <sito> [--code X] # accesso con codice (generato se assente)
   quick lock      <sito>            # solo tu puoi sovrascriverlo
   quick unlock    <sito>
+  quick upgrade   [--check]          # aggiorna la CLI all'ultima versione
   quick version`)
 }
 
