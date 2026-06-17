@@ -19,18 +19,36 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/zupolgec/quick/internal/quick"
 )
 
 // version è sovrascrivibile a build time con -ldflags "-X main.version=...".
 var version = "dev"
+
+// httpClient: chiamate di controllo verso il server (timeout totale: niente hang
+// infiniti se il server non risponde).
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
+// deployClient: upload del tar. Niente timeout totale (un tar grande su linea
+// lenta richiede tempo); limita solo i punti di blocco — connessione, TLS, attesa
+// degli header di risposta — senza cappare il trasferimento.
+var deployClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 120 * time.Second,
+		ExpectContinueTimeout: time.Second,
+	},
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -146,13 +164,6 @@ func deploy(args []string) {
 		pos = append(pos, args[0])
 		args = args[1:]
 	}
-	posSite, posDir := "", ""
-	if len(pos) >= 1 {
-		posSite = pos[0]
-	}
-	if len(pos) >= 2 {
-		posDir = pos[1]
-	}
 
 	fs := flag.NewFlagSet("deploy", flag.ExitOnError)
 	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
@@ -163,6 +174,17 @@ func deploy(args []string) {
 	dryRun := fs.Bool("dry-run", false, "mostra cosa verrebbe pubblicato senza farlo")
 	force := fs.Bool("force", false, "procedi anche se non c'è nessun file da pubblicare")
 	fs.Parse(args)
+	// flag.Parse si ferma al primo posizionale: recupera quelli messi dopo i flag,
+	// altrimenti `quick deploy --server X sito ./build` li ignorerebbe in silenzio.
+	pos = append(pos, fs.Args()...)
+
+	posSite, posDir := "", ""
+	if len(pos) >= 1 {
+		posSite = pos[0]
+	}
+	if len(pos) >= 2 {
+		posDir = pos[1]
+	}
 
 	privateSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -273,7 +295,7 @@ func deploy(args []string) {
 	req.Header.Set("Content-Type", "application/gzip")
 	req.Header.Set("Authorization", "Bearer "+tok)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := deployClient.Do(req)
 	fatal(err)
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)

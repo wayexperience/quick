@@ -37,6 +37,9 @@ func policyCmd(action string, args []string) {
 		fs.StringVar(&code, "code", "", "codice di accesso (se vuoto, generato)")
 	}
 	fs.Parse(args)
+	if name == "" && fs.NArg() > 0 {
+		name = fs.Arg(0) // posizionale messo dopo i flag
+	}
 
 	sf := loadSiteFile(".")
 	if name == "" && sf != nil {
@@ -104,7 +107,7 @@ func callPolicy(cfg *cliConfig, name, tok string, payload quick.PolicyRequest) q
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tok)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	fatal(err)
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)

@@ -195,7 +195,7 @@ func withSecret(v url.Values, cfg *cliConfig) {
 }
 
 func tokenRequest(v url.Values) (*tokenSet, error) {
-	resp, err := http.PostForm(tokenEndpoint, v)
+	resp, err := httpClient.PostForm(tokenEndpoint, v)
 	if err != nil {
 		return nil, err
 	}

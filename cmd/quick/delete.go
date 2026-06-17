@@ -28,6 +28,9 @@ func deleteCmd(args []string) {
 	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
 	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
 	fs.Parse(args)
+	if name == "" && fs.NArg() > 0 {
+		name = fs.Arg(0) // posizionale messo dopo i flag
+	}
 
 	sf := loadSiteFile(".")
 	if name == "" && sf != nil {
@@ -96,7 +99,7 @@ func fetchPolicy(cfg *cliConfig, name, tok string) quick.PolicyResponse {
 	fatal(err)
 	req.Header.Set("Authorization", "Bearer "+tok)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	fatal(err)
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
@@ -116,7 +119,7 @@ func callDelete(cfg *cliConfig, name, tok string) {
 	fatal(err)
 	req.Header.Set("Authorization", "Bearer "+tok)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	fatal(err)
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)

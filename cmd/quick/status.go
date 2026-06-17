@@ -120,7 +120,7 @@ func getPolicy(cfg *cliConfig, name, tok string) (quick.PolicyResponse, bool) {
 		return quick.PolicyResponse{}, false
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return quick.PolicyResponse{}, false
 	}
