@@ -16,7 +16,9 @@
 
 services:
   quick-server:
-    build: .
+    # Immagine pubblicata a ogni release (multi-arch). Per un deploy riproducibile
+    # pinna una versione, es. ghcr.io/zupolgec/quick-server:0.8.1.
+    image: ghcr.io/zupolgec/quick-server:latest
     restart: unless-stopped
     environment:
       QUICK_BASE_DOMAIN: ${QUICK_BASE_DOMAIN}
@@ -63,10 +65,10 @@ services:
       - coolify
 
   oauth2-proxy:
-    # immagine ufficiale + mini healthcheck statico (vedi oauth2-proxy.Dockerfile)
-    build:
-      context: .
-      dockerfile: oauth2-proxy.Dockerfile
+    # Immagine ufficiale (distroless). Niente healthcheck: in compose non farebbe
+    # auto-restart e quick-server degrada bene se l'auth è giù; meglio non mettere
+    # una shell sul componente di autenticazione solo per un check cosmetico.
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
     restart: unless-stopped
     environment:
       OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
