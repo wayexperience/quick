@@ -92,7 +92,9 @@ func (s *server) buildApexMux() *http.ServeMux {
 	m.HandleFunc("/api/sites", s.handleSites)
 	m.HandleFunc("/api/site/", s.handleSiteAPI)
 	m.HandleFunc("/oauth2/", s.handleOAuth2) // sign_in + callback (cookie su .baseDomain)
-	m.HandleFunc("/", s.handleApexRoot)      // dashboard (loggato) o pagina SSO (guest)
+	m.HandleFunc("/install.sh", s.handleInstallSh)
+	m.HandleFunc("/install.ps1", s.handleInstallPs1)
+	m.HandleFunc("/", s.handleApexRoot) // dashboard (loggato) o pagina SSO (guest)
 	return m
 }
 

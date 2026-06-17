@@ -10,6 +10,18 @@ cablato nel codice. Lo storage può essere locale o object storage S3-compatibil
 
 ## Installare la CLI
 
+Binario già pronto, nessun Go richiesto (lo scarica dall'ultima release e lo
+serve il tuo stesso dominio):
+
+```bash
+# macOS / Linux
+curl -fsSL https://<il-tuo-dominio>/install.sh | sh
+# Windows (PowerShell)
+irm https://<il-tuo-dominio>/install.ps1 | iex
+```
+
+Oppure, se hai Go:
+
 ```bash
 go install github.com/wayexperience/quick/cmd/quick@latest   # finisce in $(go env GOBIN)
 ```

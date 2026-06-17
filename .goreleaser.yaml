@@ -1,0 +1,33 @@
+# Cross-compila la CLI `quick` per macOS/Linux/Windows e pubblica una GitHub
+# Release a ogni tag vX.Y.Z. Il server (quick-server) NON viene rilasciato qui:
+# va come container su Coolify. Trigger: .github/workflows/release.yml.
+version: 2
+
+builds:
+  - id: quick
+    main: ./cmd/quick
+    binary: quick
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  # Un solo build: l'archivio lo raccoglie senza filtro esplicito.
+  - id: quick
+    # Nome prevedibile, usato dagli script di install: quick_<os>_<arch>.tar.gz
+    name_template: "quick_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: wayexperience
+    name: quick
