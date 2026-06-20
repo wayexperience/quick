@@ -1,8 +1,3 @@
-// quick skill: pubblica una Agent Skill (SKILL.md) che insegna a un agente cos'è
-// la CLI quick e come usarla. SKILL.md è un formato aperto e cross-vendor (Claude
-// Code, Codex CLI, Gemini CLI, Cursor, …): tutti cercano le skill nello stesso
-// schema di cartelle, ~/.<tool>/skills/<nome>/ (globale) o .<tool>/skills/<nome>/
-// (progetto). Il comando sfrutta questo schema invece di cablare percorsi per tool.
 package main
 
 import (
@@ -13,106 +8,104 @@ import (
 	"strings"
 )
 
-// skillDoc è il contenuto della Agent Skill. Frontmatter conforme: name in
-// minuscolo, description con "cosa fa" + "quando attivarla".
 const skillDoc = `---
 name: quick
 description: >-
-  Pubblica e gestisce siti statici sull'hosting interno "quick" con la CLI ` + "`quick`" + `.
-  Usala quando l'utente vuole mettere online una cartella di HTML/asset e ottenere
-  un URL <nome>.<dominio>, ripubblicare un sito, cambiarne la visibilità (pubblico,
-  codice di accesso, SSO aziendale), bloccarlo o eliminarlo, controllarne lo stato,
-  o capire perché un deploy esclude certi file. Copre deploy a specchio (mirror),
-  .quickignore, le convenzioni 404.html / 200.html / URL puliti, login Google e stato.
+  Publishes and manages static sites on the internal "quick" hosting with the ` + "`quick`" + ` CLI.
+  Use it when the user wants to put a folder of HTML/assets online and get
+  a <name>.<domain> URL, republish a site, change its visibility (public,
+  access code, company SSO), lock or delete it, check its status,
+  or understand why a deploy excludes certain files. Covers mirror deploys,
+  .quickignore, the 404.html / 200.html / clean URL conventions, Google login and status.
 ---
 
 # quick CLI
 
-` + "`quick`" + ` è la CLI di un hosting statico interno: pubblichi una cartella di
-HTML/asset e ottieni ` + "`https://<nome>.<dominio>`" + `. Di default un sito è visibile
-solo agli account del dominio aziendale (SSO Google); puoi aprirlo al pubblico,
-proteggerlo con un codice, o bloccarne la sovrascrittura.
+` + "`quick`" + ` is the CLI for an internal static hosting: you publish a folder of
+HTML/assets and get ` + "`https://<name>.<domain>`" + `. By default a site is visible
+only to accounts in the company domain (Google SSO); you can open it to the public,
+protect it with a code, or lock it against overwrites.
 
-Il server si configura da solo: l'unico dato necessario è l'URL, via ` + "`--server`" + `
-o la variabile ` + "`QUICK_SERVER`" + `. Dopo il primo deploy, la cartella ricorda sito
-e server in un file ` + "`.quick`" + `, quindi i comandi successivi non hanno bisogno di
-argomenti.
+The server configures itself: the only required input is the URL, via ` + "`--server`" + `
+or the ` + "`QUICK_SERVER`" + ` variable. After the first deploy, the folder remembers site
+and server in a ` + "`.quick`" + ` file, so later commands don't need
+arguments.
 
-## Primo uso
+## First use
 
 ` + "```bash" + `
-export QUICK_SERVER=https://quick.example.com   # una volta (oppure usa --server)
-quick login                                     # apre il browser per il login Google
-quick deploy mio-sito ./build                   # -> https://mio-sito.quick.example.com
+export QUICK_SERVER=https://quick.example.com   # once (or use --server)
+quick login                                     # opens the browser for Google login
+quick deploy my-site ./build                    # -> https://my-site.quick.example.com
 ` + "```" + `
 
-## Comandi
+## Commands
 
-| Comando | Cosa fa |
+| Command | What it does |
 |---|---|
-| ` + "`quick`" + ` | Panoramica (server, login, sito collegato) + elenco comandi |
-| ` + "`quick status`" + ` | Stato del sito: visibilità reale, lock, e cosa salirebbe col deploy |
-| ` + "`quick login`" + ` | Login Google (una volta; il token viene ricordato) |
-| ` + "`quick deploy [<sito>] [cartella]`" + ` | Pubblica una cartella (default: quella corrente) |
-| ` + "`quick ignore [cartella]`" + ` | Crea un ` + "`.quickignore`" + ` modificabile con i default già dentro |
-| ` + "`quick publish <sito>`" + ` | Apri al pubblico (niente SSO) |
-| ` + "`quick unpublish <sito>`" + ` | Torna dietro l'SSO aziendale (default) |
-| ` + "`quick private <sito> [--code X]`" + ` | Accesso con codice (generato se assente) |
-| ` + "`quick lock <sito>`" + ` / ` + "`quick unlock <sito>`" + ` | Blocca/sblocca la sovrascrittura (solo l'owner) |
-| ` + "`quick delete <sito>`" + ` | Elimina il sito (irreversibile, con conferma) |
+| ` + "`quick`" + ` | Overview (server, login, linked site) + command list |
+| ` + "`quick status`" + ` | Site status: real visibility, lock, and what would be deployed |
+| ` + "`quick login`" + ` | Google login (once; the token is remembered) |
+| ` + "`quick deploy [<site>] [folder]`" + ` | Publish a folder (default: the current one) |
+| ` + "`quick ignore [folder]`" + ` | Create an editable ` + "`.quickignore`" + ` with the defaults already inside |
+| ` + "`quick publish <site>`" + ` | Open to the public (no SSO) |
+| ` + "`quick unpublish <site>`" + ` | Back behind company SSO (default) |
+| ` + "`quick private <site> [--code X]`" + ` | Access by code (generated if absent) |
+| ` + "`quick lock <site>`" + ` / ` + "`quick unlock <site>`" + ` | Lock/unlock overwrites (owner only) |
+| ` + "`quick delete <site>`" + ` | Delete the site (irreversible, with confirmation) |
 
-` + "`<sito>`" + ` è opzionale se nella cartella c'è un ` + "`.quick`" + `: in quel caso il nome
-e il server vengono da lì. Senza ` + "`.quick`" + ` e senza nome, il sito prende il nome
-della cartella corrente.
+` + "`<site>`" + ` is optional if the folder has a ` + "`.quick`" + ` file: in that case the name
+and server come from there. Without ` + "`.quick`" + ` and without a name, the site takes the name
+of the current folder.
 
-## Deploy: è un mirror
+## Deploy: it's a mirror
 
-**Il deploy sostituisce l'intero contenuto del sito**, non aggiunge: i file non
-presenti nel pacchetto vengono rimossi dal sito. Conseguenze:
+**The deploy replaces the entire content of the site**, it does not add: files not
+present in the package are removed from the site. Consequences:
 
-- Per aggiornare un singolo file ripubblica comunque tutta la cartella.
-- Un deploy da una cartella vuota azzererebbe il sito: la CLI lo **blocca**
-  (serve ` + "`--force`" + ` per svuotare di proposito).
-- Prima di pubblicare la CLI mostra un riepilogo (numero file, dimensione) e
-  chiede conferma. Salta la conferma con ` + "`--yes`" + `; in contesti non interattivi
-  senza ` + "`--yes`" + ` il deploy si rifiuta, per sicurezza.
+- To update a single file you still republish the whole folder.
+- A deploy from an empty folder would wipe the site: the CLI **blocks** it
+  (use ` + "`--force`" + ` to empty it on purpose).
+- Before publishing, the CLI shows a summary (file count, size) and
+  asks for confirmation. Skip the prompt with ` + "`--yes`" + `; in non-interactive contexts
+  without ` + "`--yes`" + ` the deploy is refused, for safety.
 
-Flag utili: ` + "`--dry-run`" + ` (mostra cosa salirebbe senza pubblicare),
-` + "`--yes`" + `, ` + "`--force`" + `, ` + "`--public`" + ` / ` + "`--private[=codice]`" + ` (visibilità subito dopo il deploy).
+Useful flags: ` + "`--dry-run`" + ` (show what would be deployed without publishing),
+` + "`--yes`" + `, ` + "`--force`" + `, ` + "`--public`" + ` / ` + "`--private[=code]`" + ` (visibility right after the deploy).
 
-## Cosa NON viene pubblicato
+## What is NOT published
 
-Le esclusioni si decidono in tre livelli:
+Exclusions are decided in three tiers:
 
-1. **Sicurezza (sempre, non scavalcabile):** i file nascosti (` + "`.git`" + `, ` + "`.env`" + `, ` + "`.quick`" + `…,
-   tranne ` + "`.well-known`" + `) e i segreti (` + "`*.pem`" + `, ` + "`*.key`" + `, ` + "`id_rsa`" + `, keystore).
-2. **Comodità (predefinite, scavalcabili):** ` + "`node_modules/`" + `, ` + "`vendor/`" + `, ` + "`*.log`" + `, file temporanei.
-3. **` + "`.quickignore`" + ` (se presente):** diventa la fonte di verità delle esclusioni di
-   comodità (sintassi gitignore, con ` + "`!`" + ` per riammettere). Crealo con ` + "`quick ignore`" + `.
+1. **Security (always, not overridable):** hidden files (` + "`.git`" + `, ` + "`.env`" + `, ` + "`.quick`" + `…,
+   except ` + "`.well-known`" + `) and secrets (` + "`*.pem`" + `, ` + "`*.key`" + `, ` + "`id_rsa`" + `, keystores).
+2. **Convenience (default, overridable):** ` + "`node_modules/`" + `, ` + "`vendor/`" + `, ` + "`*.log`" + `, temporary files.
+3. **` + "`.quickignore`" + ` (if present):** becomes the source of truth for the convenience
+   exclusions (gitignore syntax, with ` + "`!`" + ` to re-include). Create it with ` + "`quick ignore`" + `.
 
-Usa ` + "`quick status`" + ` o ` + "`quick deploy ... --dry-run`" + ` per vedere file inclusi/esclusi.
+Use ` + "`quick status`" + ` or ` + "`quick deploy ... --dry-run`" + ` to see included/excluded files.
 
-## Convenzioni del sito servito
+## Served site conventions
 
-- ` + "`index.html`" + ` è l'indice di una cartella; ` + "`/about`" + ` serve ` + "`about.html`" + ` oppure
-  ` + "`about/index.html`" + ` (URL puliti senza estensione).
-- ` + "`404.html`" + ` in radice: pagina mostrata (con status 404) per i path inesistenti.
-- ` + "`200.html`" + ` in radice: app shell per le SPA; viene servita (status 200) per
-  qualsiasi rotta che non corrisponde a un file. Senza di essa i path mancanti
-  danno un 404 vero (niente fallback silenzioso sulla home).
+- ` + "`index.html`" + ` is a folder's index; ` + "`/about`" + ` serves ` + "`about.html`" + ` or
+  ` + "`about/index.html`" + ` (clean URLs without an extension).
+- ` + "`404.html`" + ` at the root: page shown (with status 404) for nonexistent paths.
+- ` + "`200.html`" + ` at the root: app shell for SPAs; served (status 200) for
+  any route that doesn't match a file. Without it, missing paths
+  give a real 404 (no silent fallback to the home page).
 
-## Note
+## Notes
 
-- Nuovi sottodomini sono immediati; i cambi di visibilità sono istantanei.
-- Un sito **bloccato** può essere sovrascritto o eliminato solo dal suo owner.
+- New subdomains are immediate; visibility changes are instant.
+- A **locked** site can be overwritten or deleted only by its owner.
 `
 
 func skillCmd(args []string) {
 	fs := flag.NewFlagSet("skill", flag.ExitOnError)
-	target := fs.String("target", "claude", "agente di destinazione (claude, codex, gemini, …)")
-	project := fs.Bool("project", false, "scrivi in .<target>/skills/quick del progetto invece che globale")
-	all := fs.Bool("all", false, "pubblica per tutti gli agenti noti (claude, codex, gemini)")
-	dir := fs.String("dir", "", "cartella esplicita (ignora --target/--project)")
+	target := fs.String("target", "claude", "target agent (claude, codex, gemini, …)")
+	project := fs.Bool("project", false, "write to the project's .<target>/skills/quick instead of global")
+	all := fs.Bool("all", false, "publish for all known agents (claude, codex, gemini)")
+	dir := fs.String("dir", "", "explicit folder (ignores --target/--project)")
 	fs.Parse(args)
 	if *dir == "" && fs.NArg() > 0 {
 		*dir = fs.Arg(0)
@@ -138,16 +131,16 @@ func skillCmd(args []string) {
 		if err := os.WriteFile(dst, []byte(skillDoc), 0o644); err != nil {
 			fatal(err)
 		}
-		fmt.Printf("✓ skill pubblicata in %s\n", dst)
+		fmt.Printf("✓ skill published to %s\n", dst)
 	}
-	fmt.Println("  Formato SKILL.md aperto: lo leggono Claude Code, Codex, Gemini, Cursor e altri.")
+	fmt.Println("  Open SKILL.md format: read by Claude Code, Codex, Gemini, Cursor and others.")
 }
 
-// skillDir costruisce la cartella della skill secondo lo schema cross-vendor:
-// ~/.<tool>/skills/quick (globale) o .<tool>/skills/quick (progetto).
+// skillDir builds the skill folder per the cross-vendor schema (Claude, Codex,
+// Gemini, …): ~/.<tool>/skills/quick (global) or .<tool>/skills/quick (project).
 func skillDir(tool string, project bool) string {
 	if tool == "" || strings.ContainsAny(tool, "/\\.") {
-		fatal(fmt.Errorf("target %q non valido", tool))
+		fatal(fmt.Errorf("invalid target %q", tool))
 	}
 	if project {
 		return filepath.Join("."+tool, "skills", "quick")

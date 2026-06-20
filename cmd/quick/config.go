@@ -1,7 +1,3 @@
-// Auto-configurazione della CLI: l'unico dato che l'utente deve fornire è l'URL
-// del server (--server o QUICK_SERVER). Il resto (client OAuth, hosted domain,
-// dominio dei siti) lo chiede al server via GET /api/config e lo cache in
-// ~/.config/quick/config.json. Niente valori hardcoded nel binario.
 package main
 
 import (
@@ -19,13 +15,11 @@ import (
 	"github.com/zupolgec/quick/internal/quick"
 )
 
-// promptServer chiede l'URL del server quando non è dato da flag/env/cache.
 func promptServer() string {
-	fmt.Fprint(os.Stderr, "URL del server quick (es. https://quick.example.com): ")
+	fmt.Fprint(os.Stderr, "quick server URL (e.g. https://quick.example.com): ")
 	return readLine()
 }
 
-// readLine legge una riga da stdin (senza spazi ai bordi).
 func readLine() string {
 	sc := bufio.NewScanner(os.Stdin)
 	if sc.Scan() {
@@ -34,7 +28,7 @@ func readLine() string {
 	return ""
 }
 
-// yesNo interpreta una risposta affermativa (italiano o inglese).
+// yesNo recognizes an affirmative answer (Italian or English).
 func yesNo(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "s", "si", "sì", "y", "yes":
@@ -80,8 +74,8 @@ func saveConfig(c *cliConfig) {
 	_ = os.WriteFile(p, b, 0o600)
 }
 
-// resolveConfig determina il server (flag > env > cache) e restituisce la config,
-// usando la cache se è dello stesso server, altrimenti rifetchando da /api/config.
+// resolveConfig picks the server (flag > env > cache) and returns the config,
+// reusing the cache for the same server or refetching from /api/config.
 func resolveConfig(serverFlag string) (*cliConfig, error) {
 	server := serverFlag
 	if server == "" {
@@ -90,20 +84,18 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 	saved := loadConfig()
 	if server == "" {
 		if saved != nil && saved.OAuthClientID != "" {
-			return saved, nil // niente server esplicito: uso quello ricordato
+			return saved, nil // no explicit server: use the remembered one
 		}
 		server = promptServer()
 	}
 	if server == "" {
-		return nil, errors.New("server richiesto (--server, QUICK_SERVER, o inseriscilo al prompt)")
+		return nil, errors.New("server required (--server, QUICK_SERVER, or enter it at the prompt)")
 	}
 
 	cands := candidates(server)
-	// se un candidato coincide col server già salvato, riuso la cache
 	if saved != nil && saved.OAuthClientID != "" && slices.Contains(cands, saved.Server) {
 		return saved, nil
 	}
-	// provo i candidati finché /api/config risponde (es. apex -> deploy.<dominio>)
 	var lastErr error
 	for _, cand := range cands {
 		c, err := fetchConfig(cand)
@@ -114,12 +106,12 @@ func resolveConfig(serverFlag string) (*cliConfig, error) {
 		}
 		lastErr = err
 	}
-	return nil, fmt.Errorf("server non raggiungibile (provati: %s): %w", strings.Join(cands, ", "), lastErr)
+	return nil, fmt.Errorf("server unreachable (tried: %s): %w", strings.Join(cands, ", "), lastErr)
 }
 
-// candidates normalizza l'input del server: accetta un dominio nudo
-// ("quick.way.srl") o un URL completo, e aggiunge https:// se manca. Tutte le
-// API e l'auth vivono sull'apex, quindi non c'è più alcun fallback su deploy.<dominio>.
+// candidates normalizes the server input: accepts a bare domain or a full URL
+// and adds https:// if missing. API and auth all live on the apex, so there is
+// no deploy.<domain> fallback.
 func candidates(input string) []string {
 	input = strings.TrimRight(strings.TrimSpace(input), "/")
 	if !strings.Contains(input, "://") {
@@ -136,7 +128,7 @@ func fetchConfig(server string) (*cliConfig, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("server non raggiungibile o /api/config assente")
+		return nil, errors.New("server unreachable or /api/config missing")
 	}
 	var r quick.ConfigResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {

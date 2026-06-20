@@ -1,14 +1,6 @@
-// quick è la CLI di quick: hosting statico self-hostable con SSO.
-//
-//	quick                                         # panoramica + help
-//	quick status                                  # stato: server, sito, visibilità, deploy
-//	quick login                                   # login Google (una volta)
-//	quick deploy [<sito>] [cartella]              # pubblica una cartella (mirror)
-//	quick ignore [cartella]                       # crea un .quickignore modificabile
-//	quick publish|unpublish|private|lock|unlock <sito>
-//
-// Il server si indica con --server o QUICK_SERVER; il resto si auto-configura
-// da GET <server>/api/config.
+// Command quick is the CLI for quick: self-hostable static hosting with SSO.
+// The server is given via --server or QUICK_SERVER; everything else
+// auto-configures from GET <server>/api/config.
 package main
 
 import (
@@ -31,16 +23,16 @@ import (
 	"github.com/zupolgec/quick/internal/quick"
 )
 
-// version è sovrascrivibile a build time con -ldflags "-X main.version=...".
+// version is overridable at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-// httpClient: chiamate di controllo verso il server (timeout totale: niente hang
-// infiniti se il server non risponde).
+// httpClient: control calls to the server, with a total timeout so the CLI
+// never hangs if the server doesn't respond.
 var httpClient = &http.Client{Timeout: 15 * time.Second}
 
-// deployClient: upload del tar. Niente timeout totale (un tar grande su linea
-// lenta richiede tempo); limita solo i punti di blocco — connessione, TLS, attesa
-// degli header di risposta — senza cappare il trasferimento.
+// deployClient: tar upload. No total timeout (a large tar on a slow link takes
+// time); only the blocking points are bounded — connect, TLS, response headers —
+// without capping the transfer.
 var deployClient = &http.Client{
 	Transport: &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
@@ -52,12 +44,12 @@ var deployClient = &http.Client{
 
 func main() {
 	if len(os.Args) < 2 {
-		overview() // `quick` da solo: panoramica + help, mai un errore
+		overview() // bare `quick`: overview + help, never an error
 		return
 	}
 	switch os.Args[1] {
 	case "help", "--help", "-h":
-		printUsage(os.Stdout) // help esplicito: stdout, exit 0
+		printUsage(os.Stdout) // explicit help: stdout, exit 0
 	case "version", "--version", "-v":
 		printVersion()
 	case "status":
@@ -68,14 +60,14 @@ func main() {
 		skillCmd(os.Args[2:])
 	case "login":
 		fs := flag.NewFlagSet("login", flag.ExitOnError)
-		server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
+		server := fs.String("server", "", "server URL (or QUICK_SERVER)")
 		fs.Parse(os.Args[2:])
 		cfg, err := resolveConfig(*server)
 		fatal(err)
 		if _, err := login(cfg); err != nil {
 			fatal(err)
 		}
-		fmt.Println("✓ login eseguito")
+		fmt.Println("✓ logged in")
 	case "deploy":
 		deploy(os.Args[2:])
 	case "rollback":
@@ -91,7 +83,6 @@ func main() {
 	}
 }
 
-// printVersion stampa la versione + il commit git (embeddato da `go build`/`go install`).
 func printVersion() {
 	rev := ""
 	if info, ok := debug.ReadBuildInfo(); ok {
@@ -114,43 +105,42 @@ func printVersion() {
 	}
 }
 
-// printUsage scrive l'elenco comandi su w (stdout per l'help, stderr per gli errori).
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, `uso (server via --server o QUICK_SERVER):
-  quick                             # panoramica + questo aiuto
-  quick status                      # stato: server, sito, visibilità, deploy
-  quick login                       # accesso Google (una volta)
-  quick deploy [<sito>] [cartella]  # pubblica una cartella (default: corrente)
-  quick rollback  <sito>            # ripristina la versione precedente
-  quick ignore  [cartella]          # crea un .quickignore modificabile
-  quick skill   [--target codex|gemini|…] [--project] [--all]  # pubblica la Agent Skill (SKILL.md)
-  quick delete    <sito>            # elimina il sito (irreversibile)
-  quick publish   <sito>            # apri al pubblico (niente SSO)
-  quick unpublish <sito>            # torna dietro SSO aziendale
-  quick private   <sito> [--code X] # accesso con codice (generato se assente)
-  quick lock      <sito>            # solo tu puoi sovrascriverlo
-  quick unlock    <sito>
-  quick upgrade   [--check]          # aggiorna la CLI all'ultima versione
+	fmt.Fprintln(w, `usage (server via --server or QUICK_SERVER):
+  quick                             # overview + this help
+  quick status                      # status: server, site, visibility, deploy
+  quick login                       # Google login (once)
+  quick deploy [<site>] [folder]    # publish a folder (default: current)
+  quick rollback  <site>            # restore the previous version
+  quick ignore  [folder]            # create an editable .quickignore
+  quick skill   [--target codex|gemini|…] [--project] [--all]  # publish the Agent Skill (SKILL.md)
+  quick delete    <site>            # delete the site (irreversible)
+  quick publish   <site>            # open to the public (no SSO)
+  quick unpublish <site>            # back behind company SSO
+  quick private   <site> [--code X] # access by code (generated if absent)
+  quick lock      <site>            # only you can overwrite it
+  quick unlock    <site>
+  quick upgrade   [--check]          # update the CLI to the latest version
   quick version`)
 }
 
-// usage stampa l'uso su stderr ed esce con errore (comando sconosciuto).
+// usage prints usage to stderr and exits with an error (unknown command).
 func usage() {
 	printUsage(os.Stderr)
 	os.Exit(2)
 }
 
-// overview è ciò che mostra `quick` da solo: una riga di contesto (senza rete né
-// prompt) e poi l'elenco comandi. Per lo stato completo c'è `quick status`.
+// overview is what bare `quick` shows: a context line (no network, no prompt)
+// then the command list. Full state lives in `quick status`.
 func overview() {
 	if cfg := loadConfig(); cfg != nil && cfg.Server != "" {
-		auth := "non autenticato (esegui `quick login`)"
+		auth := "not authenticated (run `quick login`)"
 		if haveLogin() {
-			auth = "autenticato"
+			auth = "authenticated"
 		}
 		fmt.Printf("Server: %s — %s\n", cfg.Server, auth)
 		if sf := loadSiteFile("."); sf != nil {
-			fmt.Printf("Cartella collegata al sito: %s\n", sf.Name)
+			fmt.Printf("Folder linked to site: %s\n", sf.Name)
 		}
 		fmt.Println()
 	}
@@ -158,7 +148,7 @@ func overview() {
 }
 
 func deploy(args []string) {
-	// Posizionali: [<sito>] [cartella]. Si fermano al primo flag.
+	// positionals [<site>] [folder]; stop at the first flag.
 	var pos []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") && len(pos) < 2 {
 		pos = append(pos, args[0])
@@ -166,16 +156,16 @@ func deploy(args []string) {
 	}
 
 	fs := flag.NewFlagSet("deploy", flag.ExitOnError)
-	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
-	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
-	public := fs.Bool("public", false, "rendi il sito pubblico (niente SSO)")
-	private := fs.String("private", "", "rendi il sito privato con questo codice (--private= vuoto = generato)")
-	yes := fs.Bool("yes", false, "non chiedere conferma prima di pubblicare")
-	dryRun := fs.Bool("dry-run", false, "mostra cosa verrebbe pubblicato senza farlo")
-	force := fs.Bool("force", false, "procedi anche se non c'è nessun file da pubblicare")
+	server := fs.String("server", "", "server URL (or QUICK_SERVER)")
+	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "Google ID token (default: saved login)")
+	public := fs.Bool("public", false, "make the site public (no SSO)")
+	private := fs.String("private", "", "make the site private with this code (--private= empty = generated)")
+	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	dryRun := fs.Bool("dry-run", false, "show what would be published without doing it")
+	force := fs.Bool("force", false, "proceed even if there are no files to publish")
 	fs.Parse(args)
-	// flag.Parse si ferma al primo posizionale: recupera quelli messi dopo i flag,
-	// altrimenti `quick deploy --server X sito ./build` li ignorerebbe in silenzio.
+	// flag.Parse stops at the first positional; recover those placed after the
+	// flags, else `quick deploy --server X site ./build` would silently drop them.
 	pos = append(pos, fs.Args()...)
 
 	posSite, posDir := "", ""
@@ -193,14 +183,14 @@ func deploy(args []string) {
 		}
 	})
 	if *public && privateSet {
-		fatal(fmt.Errorf("--public e --private sono mutuamente esclusivi"))
+		fatal(fmt.Errorf("--public and --private are mutually exclusive"))
 	}
 
-	// .quick vive nella cartella corrente (come per publish/private/delete), non
-	// in quella deployata: la radice del progetto è stabile, ./build è effimero.
+	// .quick lives in the current folder, not in the deployed one: the project
+	// root is stable, ./build is ephemeral.
 	sf := loadSiteFile(".")
 
-	// Cartella da pubblicare: posizionale > dir ricordato nel .quick > corrente.
+	// folder to publish: positional > dir remembered in .quick > current.
 	dir := "."
 	switch {
 	case posDir != "":
@@ -209,7 +199,7 @@ func deploy(args []string) {
 		dir = sf.Dir
 	}
 
-	// Nome sito: posizionale > .quick > nome della cartella.
+	// site name: positional > .quick > folder name.
 	siteName := posSite
 	if siteName == "" && sf != nil {
 		siteName = sf.Name
@@ -220,17 +210,16 @@ func deploy(args []string) {
 	}
 	name := &siteName
 	if !quick.ValidName(*name) {
-		// Probabile errore di ordine: l'utente ha messo la cartella come 1° argomento.
+		// likely argument-order mistake: folder passed as the first argument.
 		if posSite != "" && posDir == "" && looksLikePath(posSite) {
-			fatal(fmt.Errorf("%q sembra una cartella: la sintassi è `quick deploy <sito> [cartella]` (sito per primo)", posSite))
+			fatal(fmt.Errorf("%q looks like a folder: the syntax is `quick deploy <site> [folder]` (site first)", posSite))
 		}
-		fatal(fmt.Errorf("nome sito %q non valido (usa a-z, 0-9, trattino)", *name))
+		fatal(fmt.Errorf("invalid site name %q (use a-z, 0-9, hyphen)", *name))
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		fatal(fmt.Errorf("%q non è una cartella", dir))
+		fatal(fmt.Errorf("%q is not a folder", dir))
 	}
 
-	// Calcola il piano (cosa sale, cosa è escluso): condiviso con --dry-run.
 	pl, err := buildPlan(dir)
 	fatal(err)
 
@@ -239,14 +228,12 @@ func deploy(args []string) {
 		return
 	}
 
-	// Guardia "deploy vuoto": senza file il mirror azzererebbe il sito.
+	// empty-deploy guard: with no files the mirror would wipe the site.
 	if len(pl.files) == 0 && !*force {
-		fatal(fmt.Errorf("nessun file da pubblicare in %q (esclusi %d). Usa --force per svuotare comunque il sito", dir, pl.excluded))
+		fatal(fmt.Errorf("no files to publish in %q (%d excluded). Use --force to empty the site anyway", dir, pl.excluded))
 	}
 
-	// Se la cartella è già collegata a un altro sito (.quick), avvisa prima di
-	// fare deploy altrove: facile da innescare col sito sbagliato.
-	if !confirmSiteMismatch(sf, *name, "fare deploy su") {
+	if !confirmSiteMismatch(sf, *name, "deploy to") {
 		return
 	}
 
@@ -257,7 +244,7 @@ func deploy(args []string) {
 	cfg, err := resolveConfig(srv)
 	fatal(err)
 
-	// Autenticazione subito: serve l'identità per la conferma "ultimo deploy".
+	// authenticate now: the identity is needed for the "last deploy" confirmation.
 	tok := *token
 	if tok == "" {
 		if tok, err = idToken(cfg); err != nil {
@@ -266,23 +253,28 @@ func deploy(args []string) {
 	}
 	me := emailFromToken(tok)
 	if me != "" {
-		fmt.Printf("%s Autenticato come %s\n", check(), cCyan(localPart(me)))
+		fmt.Printf("%s Authenticated as %s\n", check(), cCyan(localPart(me)))
 	}
 
-	// Conferma rinforzata se l'ultimo deploy non era tuo (stile Shopify): ridigita
-	// il nome prima di sovrascrivere il lavoro di un'altra persona.
+	// Existence is known from the policy: it tells a first publish apart from a
+	// replace, and drives the reinforced "last deploy wasn't yours" confirmation
+	// (Shopify style: retype the name before overwriting someone else's work).
+	exists := false
 	if !*yes {
-		if pol, ok := getPolicy(cfg, *name, tok); ok && pol.Exists && pol.UpdatedBy != "" && pol.UpdatedBy != me {
-			if !confirmOverwrite(*name, pol.UpdatedBy) {
-				fmt.Fprintln(os.Stderr, "annullato")
-				return
+		if pol, ok := getPolicy(cfg, *name, tok); ok {
+			exists = pol.Exists
+			if pol.Exists && pol.UpdatedBy != "" && pol.UpdatedBy != me {
+				if !confirmOverwrite(*name, pol.UpdatedBy) {
+					fmt.Fprintln(os.Stderr, "cancelled")
+					return
+				}
 			}
 		}
 	}
 
-	// Riepilogo + conferma: sostituire l'intero sito è un'operazione distruttiva.
-	if !confirmDeploy(*name, cfg, pl, *yes) {
-		fmt.Fprintln(os.Stderr, "annullato")
+	// Summary + confirmation: replacing an existing site is destructive.
+	if !confirmDeploy(*name, cfg, pl, exists, *yes) {
+		fmt.Fprintln(os.Stderr, "cancelled")
 		return
 	}
 
@@ -300,35 +292,34 @@ func deploy(args []string) {
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "deploy fallito (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		fmt.Fprintf(os.Stderr, "deploy failed (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		os.Exit(1)
 	}
 
 	var res quick.DeployResponse
 	json.Unmarshal(respBody, &res)
-	fmt.Printf("%s %s pubblicato → %s\n", check(), cBold(*name), cCyan(res.URL))
+	fmt.Printf("%s %s published → %s\n", check(), cBold(*name), cCyan(res.URL))
 	relDir := filepath.ToSlash(filepath.Clean(dir))
 	if relDir == "." {
 		relDir = ""
 	}
 	saveSiteFile(".", siteFile{Name: *name, Server: cfg.Server, Dir: relDir})
 
-	// Visibilità opzionale applicata subito dopo il deploy.
+	// optional visibility applied right after the deploy.
 	switch {
 	case *public:
 		callPolicy(cfg, *name, tok, quick.PolicyRequest{Access: new(quick.AccessPublic)})
-		fmt.Println("  → pubblico (niente SSO)")
+		fmt.Println("  → public (no SSO)")
 	case privateSet:
 		code := *private
 		if code == "" {
 			code = genCode()
 		}
 		callPolicy(cfg, *name, tok, quick.PolicyRequest{Access: new(quick.AccessCode), Code: &code})
-		fmt.Printf("  → privato, codice: %s\n", code)
+		fmt.Printf("  → private, code: %s\n", code)
 	}
 }
 
-// tarGz calcola il piano della cartella e ne crea il tar.gz in memoria.
 func tarGz(dir string) (*bytes.Buffer, error) {
 	p, err := buildPlan(dir)
 	if err != nil {
@@ -337,7 +328,6 @@ func tarGz(dir string) (*bytes.Buffer, error) {
 	return tarGzFromPlan(dir, p)
 }
 
-// tarGzFromPlan impacchetta i soli file del piano (già filtrati dai tre tier).
 func tarGzFromPlan(dir string, p *plan) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -376,8 +366,8 @@ func tarGzFromPlan(dir string, p *plan) (*bytes.Buffer, error) {
 	return &buf, nil
 }
 
-// looksLikePath indica che l'argomento somiglia a una cartella, non a un nome di
-// sito: utile per dare un errore chiaro se l'utente inverte l'ordine.
+// looksLikePath reports whether the argument looks like a folder rather than a
+// site name, for a clearer error when the order is swapped.
 func looksLikePath(s string) bool {
 	if strings.ContainsAny(s, "/\\.") {
 		return true
@@ -388,7 +378,7 @@ func looksLikePath(s string) bool {
 
 func fatal(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "errore:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }

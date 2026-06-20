@@ -9,8 +9,8 @@ import (
 	"github.com/zupolgec/quick/internal/storage"
 )
 
-// handleConfig espone (pubblicamente) ciò che serve alla CLI per auto-configurarsi:
-// client OAuth, hosted domain, dominio dei siti. Nessun segreto.
+// handleConfig publicly exposes what the CLI needs to self-configure: OAuth
+// client, hosted domain, sites domain. No secrets.
 func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(quick.ConfigResponse{

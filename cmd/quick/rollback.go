@@ -1,6 +1,3 @@
-// quick rollback <sito>: ripristina la versione precedente del sito (annulla
-// l'ultimo deploy). Un secondo rollback la rifà. Disponibile sullo storage
-// locale; sull'object storage va gestito col versioning del bucket.
 package main
 
 import (
@@ -25,12 +22,12 @@ func rollbackCmd(args []string) {
 	}
 
 	fs := flag.NewFlagSet("rollback", flag.ExitOnError)
-	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
-	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
-	yes := fs.Bool("yes", false, "non chiedere conferma")
+	server := fs.String("server", "", "server URL (or QUICK_SERVER)")
+	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "Google ID token (default: saved login)")
+	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	fs.Parse(args)
 	if name == "" && fs.NArg() > 0 {
-		name = fs.Arg(0) // posizionale messo dopo i flag
+		name = fs.Arg(0) // positional placed after the flags
 	}
 
 	sf := loadSiteFile(".")
@@ -38,15 +35,15 @@ func rollbackCmd(args []string) {
 		name = sf.Name
 	}
 	if name == "" {
-		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
+		fatal(errors.New("missing site name (or run inside a folder with a .quick file)"))
 	}
-	if !confirmSiteMismatch(sf, name, "ripristinare") {
+	if !confirmSiteMismatch(sf, name, "restore") {
 		return
 	}
 	if !*yes {
-		fmt.Fprintf(os.Stderr, "  Riporto %s alla versione precedente? [s/N]: ", name)
+		fmt.Fprintf(os.Stderr, "  Roll %s back to the previous version? [y/N]: ", name)
 		if !yesNo(readLine()) {
-			fmt.Fprintln(os.Stderr, "annullato")
+			fmt.Fprintln(os.Stderr, "cancelled")
 			return
 		}
 	}
@@ -75,10 +72,10 @@ func rollbackCmd(args []string) {
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "rollback fallito (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
+		fmt.Fprintf(os.Stderr, "rollback failed (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
 		os.Exit(1)
 	}
 	var res quick.RollbackResponse
 	json.Unmarshal(rb, &res)
-	fmt.Printf("%s %s ripristinato alla versione precedente → %s\n", check(), cBold(name), cCyan(res.URL))
+	fmt.Printf("%s %s restored to the previous version → %s\n", check(), cBold(name), cCyan(res.URL))
 }

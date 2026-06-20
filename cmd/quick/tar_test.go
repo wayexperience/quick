@@ -26,11 +26,10 @@ func TestTarGzExcludesDotfiles(t *testing.T) {
 	write(".git/config", "g")
 	write(".quick", `{"name":"n"}`)
 	write(".well-known/acme.txt", "a")
-	// Tier 1: segreti senza punto iniziale.
+	// Tier 1: secrets without a leading dot.
 	write("id_rsa", "PRIVATE")
 	write("certs/server.key", "KEY")
 	write("app.pem", "CERT")
-	// Tier 2: comodità.
 	write("node_modules/dep/index.js", "m")
 	write("build.log", "l")
 
@@ -51,7 +50,7 @@ func TestTarGzExcludesDotfiles(t *testing.T) {
 
 	for _, w := range []string{"index.html", "sub/index.html", ".well-known/acme.txt"} {
 		if !got[w] {
-			t.Errorf("manca %q nel tarball", w)
+			t.Errorf("missing %q in the tarball", w)
 		}
 	}
 	bad := []string{
@@ -61,13 +60,13 @@ func TestTarGzExcludesDotfiles(t *testing.T) {
 	}
 	for _, b := range bad {
 		if got[b] {
-			t.Errorf("%q NON dovrebbe essere nel tarball", b)
+			t.Errorf("%q should NOT be in the tarball", b)
 		}
 	}
 }
 
-// Un .quickignore pubblicato diventa la fonte di verità del Tier 2: può
-// riammettere un default (node_modules) ed escludere altro; il Tier 1 resta.
+// A published .quickignore becomes the Tier 2 source of truth: it can re-include
+// a default (node_modules) and exclude others; Tier 1 still applies.
 func TestQuickignoreOverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	write := func(p, c string) {
@@ -80,9 +79,9 @@ func TestQuickignoreOverridesDefaults(t *testing.T) {
 		}
 	}
 	write("index.html", "hi")
-	write("node_modules/keep.js", "k") // non più escluso: i default non valgono
-	write("draft.html", "d")           // escluso dal .quickignore
-	write(".env", "SECRET=1")          // Tier 1: sempre escluso, anche così
+	write("node_modules/keep.js", "k") // no longer excluded: defaults don't apply
+	write("draft.html", "d")           // excluded by .quickignore
+	write(".env", "SECRET=1")          // Tier 1: always excluded, even here
 	write(".quickignore", "draft.html\n")
 
 	p, err := buildPlan(dir)
@@ -90,7 +89,7 @@ func TestQuickignoreOverridesDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !p.hasQuickignore {
-		t.Fatal("atteso hasQuickignore=true")
+		t.Fatal("expected hasQuickignore=true")
 	}
 	got := map[string]bool{}
 	for _, f := range p.files {
@@ -98,12 +97,12 @@ func TestQuickignoreOverridesDefaults(t *testing.T) {
 	}
 	for _, w := range []string{"index.html", "node_modules/keep.js"} {
 		if !got[w] {
-			t.Errorf("manca %q nel piano", w)
+			t.Errorf("missing %q in the plan", w)
 		}
 	}
 	for _, b := range []string{"draft.html", ".env"} {
 		if got[b] {
-			t.Errorf("%q NON dovrebbe essere nel piano", b)
+			t.Errorf("%q should NOT be in the plan", b)
 		}
 	}
 }

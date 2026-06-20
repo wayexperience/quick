@@ -1,9 +1,3 @@
-// quick upgrade: aggiorna la CLI all'ultima release pubblicata su GitHub,
-// rimpiazzando il binario in esecuzione. Nessuna dipendenza esterna: API GitHub
-// + estrazione dell'archivio con la stdlib.
-//
-//	quick upgrade            # scarica e installa l'ultima versione
-//	quick upgrade --check    # dice solo se ce n'è una più recente
 package main
 
 import (
@@ -25,12 +19,11 @@ import (
 	"time"
 )
 
-// upgradeRepo è il repo upstream da cui si scaricano le release.
 const upgradeRepo = "zupolgec/quick"
 
 func upgradeCmd(args []string) {
 	fs := flag.NewFlagSet("upgrade", flag.ExitOnError)
-	checkOnly := fs.Bool("check", false, "controlla solo se c'è una versione più recente, senza installarla")
+	checkOnly := fs.Bool("check", false, "only check if a newer version exists, without installing it")
 	fs.Parse(args)
 
 	cur := currentVersion()
@@ -38,24 +31,24 @@ func upgradeCmd(args []string) {
 	fatal(err)
 
 	if normVer(tag) == normVer(cur) {
-		fmt.Printf("%s quick è già aggiornato (%s)\n", check(), cur)
+		fmt.Printf("%s quick is already up to date (%s)\n", check(), cur)
 		return
 	}
 	if *checkOnly {
-		fmt.Printf("È disponibile %s (hai %s). Aggiorna con %s\n", cBold(tag), cur, cBold("quick upgrade"))
+		fmt.Printf("%s is available (you have %s). Update with %s\n", cBold(tag), cur, cBold("quick upgrade"))
 		return
 	}
 	if assetURL == "" {
-		fatal(fmt.Errorf("nessun binario per %s/%s nella release %s", runtime.GOOS, runtime.GOARCH, tag))
+		fatal(fmt.Errorf("no binary for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, tag))
 	}
 
-	fmt.Printf("Aggiorno quick %s → %s…\n", cur, cBold(tag))
+	fmt.Printf("Updating quick %s → %s…\n", cur, cBold(tag))
 	fatal(doUpgrade(assetURL))
-	fmt.Printf("%s quick aggiornato a %s\n", check(), cBold(tag))
+	fmt.Printf("%s quick updated to %s\n", check(), cBold(tag))
 }
 
-// currentVersion è la versione del binario (var version, o il module version se
-// installato con `go install`).
+// currentVersion is the binary version (var version, or the module version when
+// installed with `go install`).
 func currentVersion() string {
 	v := version
 	if v == "dev" {
@@ -75,11 +68,11 @@ func archiveExt() string {
 	return "tar.gz"
 }
 
-// latestRelease interroga l'API GitHub e restituisce tag e URL dell'archivio per
-// la piattaforma corrente (assetURL vuoto se non c'è un binario adatto).
+// latestRelease queries the GitHub API and returns the tag and archive URL for
+// the current platform (assetURL empty if there is no matching binary).
 func latestRelease() (tag, assetURL string, err error) {
 	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos/"+upgradeRepo+"/releases/latest", nil)
-	req.Header.Set("User-Agent", "quick-cli") // l'API GitHub lo richiede
+	req.Header.Set("User-Agent", "quick-cli") // required by the GitHub API
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
@@ -87,7 +80,7 @@ func latestRelease() (tag, assetURL string, err error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("API GitHub: %s", resp.Status)
+		return "", "", fmt.Errorf("GitHub API: %s", resp.Status)
 	}
 	var rel struct {
 		TagName string `json:"tag_name"`
@@ -109,8 +102,8 @@ func latestRelease() (tag, assetURL string, err error) {
 	return rel.TagName, assetURL, nil
 }
 
-// doUpgrade scarica l'archivio, ne estrae il binario e rimpiazza l'eseguibile in
-// corsa (rename atomico nella stessa cartella; su Windows sposta prima il vecchio).
+// doUpgrade downloads the archive, extracts the binary and replaces the running
+// executable (atomic rename in the same folder; on Windows the old one is moved first).
 func doUpgrade(assetURL string) error {
 	arch, err := download(assetURL)
 	if err != nil {
@@ -137,7 +130,7 @@ func doUpgrade(assetURL string) error {
 		return permHint(filepath.Dir(exe), err)
 	}
 	if runtime.GOOS == "windows" {
-		// Su Windows non si può sovrascrivere un .exe in uso: sposta il vecchio.
+		// can't overwrite an in-use .exe on Windows: move the old one aside.
 		_ = os.Rename(exe, exe+".old")
 	}
 	if err := os.Rename(tmp, exe); err != nil {
@@ -156,12 +149,12 @@ func download(url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download fallito: %s", resp.Status)
+		return nil, fmt.Errorf("download failed: %s", resp.Status)
 	}
 	return io.ReadAll(resp.Body)
 }
 
-// extractBinary estrae il file binName dall'archivio (tar.gz o zip).
+// extractBinary extracts binName from the archive (tar.gz or zip).
 func extractBinary(arch []byte, binName string) ([]byte, error) {
 	if archiveExt() == "zip" {
 		zr, err := zip.NewReader(bytes.NewReader(arch), int64(len(arch)))
@@ -178,7 +171,7 @@ func extractBinary(arch []byte, binName string) ([]byte, error) {
 				return io.ReadAll(rc)
 			}
 		}
-		return nil, errors.New("binario non trovato nell'archivio")
+		return nil, errors.New("binary not found in the archive")
 	}
 	gz, err := gzip.NewReader(bytes.NewReader(arch))
 	if err != nil {
@@ -197,12 +190,12 @@ func extractBinary(arch []byte, binName string) ([]byte, error) {
 			return io.ReadAll(tr)
 		}
 	}
-	return nil, errors.New("binario non trovato nell'archivio")
+	return nil, errors.New("binary not found in the archive")
 }
 
 func permHint(dir string, err error) error {
 	if os.IsPermission(err) {
-		return fmt.Errorf("permessi insufficienti per scrivere in %s: riprova con sudo o reinstalla con l'one-liner", dir)
+		return fmt.Errorf("insufficient permissions to write to %s: retry with sudo or reinstall with the one-liner", dir)
 	}
 	return err
 }

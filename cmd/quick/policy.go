@@ -1,10 +1,3 @@
-// Comandi di policy della CLI: apertura al pubblico, accesso con codice, lock.
-//
-//	quick publish   <sito>            # visibile a chiunque (niente SSO)
-//	quick unpublish <sito>            # torna dietro SSO aziendale
-//	quick private   <sito> [--code X] # accesso con codice (generato se assente)
-//	quick lock      <sito>            # solo tu puoi sovrascriverlo
-//	quick unlock    <sito>
 package main
 
 import (
@@ -30,15 +23,15 @@ func policyCmd(action string, args []string) {
 	}
 
 	fs := flag.NewFlagSet(action, flag.ExitOnError)
-	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
-	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
+	server := fs.String("server", "", "server URL (or QUICK_SERVER)")
+	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "Google ID token (default: saved login)")
 	var code string
 	if action == "private" {
-		fs.StringVar(&code, "code", "", "codice di accesso (se vuoto, generato)")
+		fs.StringVar(&code, "code", "", "access code (if empty, generated)")
 	}
 	fs.Parse(args)
 	if name == "" && fs.NArg() > 0 {
-		name = fs.Arg(0) // posizionale messo dopo i flag
+		name = fs.Arg(0) // positional placed after the flags
 	}
 
 	sf := loadSiteFile(".")
@@ -46,9 +39,9 @@ func policyCmd(action string, args []string) {
 		name = sf.Name
 	}
 	if name == "" {
-		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
+		fatal(errors.New("missing site name (or run inside a folder with a .quick file)"))
 	}
-	if !confirmSiteMismatch(sf, name, "modificare") {
+	if !confirmSiteMismatch(sf, name, "modify") {
 		return
 	}
 
@@ -87,15 +80,15 @@ func policyCmd(action string, args []string) {
 	url := "https://" + res.Site + "." + cfg.BaseDomain
 	switch action {
 	case "private":
-		fmt.Printf("✓ %s protetto da codice → %s\n  codice: %s\n", name, url, code)
+		fmt.Printf("✓ %s protected by code → %s\n  code: %s\n", name, url, code)
 	case "publish":
-		fmt.Printf("✓ %s pubblico → %s\n", name, url)
+		fmt.Printf("✓ %s public → %s\n", name, url)
 	case "unpublish":
-		fmt.Printf("✓ %s di nuovo dietro SSO → %s\n", name, url)
+		fmt.Printf("✓ %s back behind SSO → %s\n", name, url)
 	case "lock":
-		fmt.Printf("✓ %s bloccato (solo %s può sovrascriverlo)\n", name, res.Owner)
+		fmt.Printf("✓ %s locked (only %s can overwrite it)\n", name, res.Owner)
 	case "unlock":
-		fmt.Printf("✓ %s sbloccato\n", name)
+		fmt.Printf("✓ %s unlocked\n", name)
 	}
 }
 
@@ -112,7 +105,7 @@ func callPolicy(cfg *cliConfig, name, tok string, payload quick.PolicyRequest) q
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "fallito (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
+		fmt.Fprintf(os.Stderr, "failed (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
 		os.Exit(1)
 	}
 	var res quick.PolicyResponse
@@ -120,7 +113,7 @@ func callPolicy(cfg *cliConfig, name, tok string, payload quick.PolicyRequest) q
 	return res
 }
 
-// genCode crea un codice di accesso breve e leggibile (niente caratteri ambigui).
+// genCode creates a short, readable access code (no ambiguous characters).
 func genCode() string {
 	const alphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 	b := make([]byte, 8)

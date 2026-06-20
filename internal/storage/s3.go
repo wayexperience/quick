@@ -1,7 +1,7 @@
-// Backend S3-compatibile (Hetzner Object Storage / MinIO / R2, …) via minio-go.
-// Layout oggetti: <prefix>sites/<site>/<path...> per i contenuti,
-// <prefix>meta/<site>.json per la policy. Con questo backend il container è
-// stateless (nessun volume).
+// S3-compatible backend (Hetzner Object Storage / MinIO / R2, ...) via minio-go.
+// Object layout: <prefix>sites/<site>/<path...> for contents,
+// <prefix>meta/<site>.json for policy. With this backend the container is
+// stateless (no volume).
 package storage
 
 import (
@@ -21,14 +21,13 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// S3Config: connessione all'endpoint S3-compatibile.
 type S3Config struct {
-	Endpoint  string // host[:port], senza schema
+	Endpoint  string // host[:port], no scheme
 	Region    string
 	Bucket    string
 	AccessKey string
 	SecretKey string
-	Prefix    string // prefisso opzionale dentro al bucket (es. "quick/")
+	Prefix    string // optional prefix within the bucket (e.g. "quick/")
 	UseSSL    bool
 }
 
@@ -81,8 +80,8 @@ func (s *s3) PutSite(site string, tr *tar.Reader) error {
 		if rel == "" {
 			continue
 		}
-		// Limiti anti-bomb: la dimensione dichiarata è autorevole (tar.Reader legge
-		// esattamente hdr.Size per entry, e PutObject ne consuma altrettanti).
+		// Anti-bomb caps: the declared size is authoritative (tar.Reader reads
+		// exactly hdr.Size per entry, and PutObject consumes the same).
 		if files++; files > maxExtractFiles {
 			return errTooManyFiles
 		}
@@ -101,8 +100,8 @@ func (s *s3) PutSite(site string, tr *tar.Reader) error {
 		}
 		keep[key] = true
 	}
-	// Rimuove gli oggetti rimasti dal deploy precedente (consistenza eventuale,
-	// non è uno swap atomico: tradeoff accettato).
+	// Remove objects left over from the previous deploy (eventual consistency,
+	// not an atomic swap: accepted tradeoff).
 	for obj := range s.cli.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix: s.sitePrefix(site), Recursive: true,
 	}) {
@@ -205,10 +204,10 @@ func (s *s3) ListSites() ([]string, error) {
 	return out, nil
 }
 
-// Rollback non è supportato sull'object storage: niente rename atomico né copia
-// della versione precedente (vedi README, va fatto via versioning del bucket).
+// Rollback isn't supported on object storage: no atomic rename nor a copy of
+// the previous version (use bucket versioning instead, see README).
 func (s *s3) Rollback(site string) (bool, error) {
-	return false, errors.New("rollback non supportato su storage s3 (usa il versioning del bucket)")
+	return false, errors.New("rollback not supported on s3 storage (use bucket versioning)")
 }
 
 func (s *s3) GetMeta(site string) ([]byte, bool, error) {

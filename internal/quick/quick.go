@@ -1,7 +1,6 @@
-// Package quick è il contratto condiviso tra la CLI (cmd/quick) e il server
-// (cmd/quick-server): validazione dei nomi, modi di accesso, DTO delle API e
-// qualche helper. Tenere qui ciò che le due parti DEVONO concordare, così non
-// può divergere.
+// Package quick is the contract shared by the CLI (cmd/quick) and the server
+// (cmd/quick-server): name validation, access modes, API DTOs and a few
+// helpers. Whatever the two sides must agree on lives here so it can't diverge.
 package quick
 
 import (
@@ -10,40 +9,39 @@ import (
 	"strings"
 )
 
-// NameRe valida il nome di un sito (= sottodominio): minuscole, cifre, trattino.
+// NameRe validates a site name (= subdomain): lowercase, digits, hyphen.
 var NameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 
-// ValidName indica se name è un nome di sito accettabile.
 func ValidName(name string) bool { return NameRe.MatchString(name) }
 
-// Modi di accesso a un sito. Stringa vuota = SSO (default aziendale).
+// Site access modes. Empty string = SSO (company default).
 const (
 	AccessSSO    = ""
 	AccessPublic = "public"
 	AccessCode   = "code"
 )
 
-// PolicyRequest è il body di PATCH/POST /api/site/<name>/policy.
+// PolicyRequest is the body of PATCH/POST /api/site/<name>/policy.
 type PolicyRequest struct {
 	Access *string `json:"access,omitempty"` // "sso" | "public" | "code"
-	Code   *string `json:"code,omitempty"`   // richiesto per access=code
+	Code   *string `json:"code,omitempty"`   // required for access=code
 	Locked *bool   `json:"locked,omitempty"`
 }
 
-// PolicyResponse è la risposta degli endpoint di policy (POST muta, GET legge).
+// PolicyResponse is the policy endpoints' response (POST mutates, GET reads).
 type PolicyResponse struct {
 	Site      string `json:"site"`
 	Access    string `json:"access"`
 	Locked    bool   `json:"locked"`
 	Owner     string `json:"owner"`
-	Exists    bool   `json:"exists"` // il sito ha contenuti o metadata
+	Exists    bool   `json:"exists"` // site has contents or metadata
 	CreatedBy string `json:"created_by,omitempty"`
 	CreatedAt string `json:"created_at,omitempty"` // RFC3339
 	UpdatedBy string `json:"updated_by,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"` // RFC3339
 }
 
-// SiteInfo descrive un sito nella lista /api/sites (e nella dashboard).
+// SiteInfo describes a site in the /api/sites list (and the dashboard).
 type SiteInfo struct {
 	Site      string `json:"site"`
 	URL       string `json:"url"`
@@ -56,44 +54,40 @@ type SiteInfo struct {
 	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
-// SitesResponse è la risposta di GET /api/sites.
 type SitesResponse struct {
 	Sites []SiteInfo `json:"sites"`
 }
 
-// RollbackResponse è la risposta di POST /api/site/<name>/rollback.
 type RollbackResponse struct {
 	Site       string `json:"site"`
 	RolledBack bool   `json:"rolled_back"`
 	URL        string `json:"url,omitempty"`
 }
 
-// DeleteResponse è la risposta di DELETE /api/site/<name>.
 type DeleteResponse struct {
 	Site    string `json:"site"`
 	Deleted bool   `json:"deleted"`
 }
 
-// DeployResponse è la risposta di /api/deploy.
 type DeployResponse struct {
 	Site string `json:"site"`
 	URL  string `json:"url"`
 	By   string `json:"by"`
 }
 
-// ConfigResponse è la risposta pubblica di /api/config: tutto ciò che serve
-// alla CLI per auto-configurarsi senza valori hardcoded.
+// ConfigResponse is the public /api/config response: everything the CLI needs
+// to self-configure without hardcoded values.
 type ConfigResponse struct {
 	OAuthClientID string `json:"oauth_client_id"`
-	// OAuthClientSecret è valorizzato solo se il server riusa un client OAuth di
-	// tipo "Web" per la CLI (che richiede il secret nello scambio token). Per un
-	// client "Desktop" resta vuoto e la CLI usa solo PKCE.
+	// Set only when the server reuses a "Web"-type OAuth client for the CLI
+	// (which needs the secret in the token exchange). For a "Desktop" client it
+	// stays empty and the CLI uses PKCE only.
 	OAuthClientSecret string `json:"oauth_client_secret,omitempty"`
 	HostedDomain      string `json:"hosted_domain"`
 	BaseDomain        string `json:"base_domain"`
 }
 
-// Env restituisce la variabile d'ambiente k, o def se vuota/assente.
+// Env returns env var k, or def if empty/absent.
 func Env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
@@ -101,7 +95,7 @@ func Env(k, def string) string {
 	return def
 }
 
-// SplitList spezza una lista separata da virgole, ignorando spazi e vuoti.
+// SplitList splits a comma-separated list, ignoring spaces and empties.
 func SplitList(s string) []string {
 	var out []string
 	for p := range strings.SplitSeq(s, ",") {

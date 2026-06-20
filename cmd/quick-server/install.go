@@ -1,10 +1,10 @@
-// Gli script di install della CLI, serviti (pubblici, niente SSO) dall'apex così
-// che l'one-liner punti al proprio dominio invece che a un raw GitHub:
+// CLI install scripts, served publicly (no SSO) from the apex so the one-liner
+// points at this domain instead of a raw GitHub URL:
 //
-//	curl -fsSL https://<dominio>/install.sh | sh        (macOS/Linux)
-//	irm https://<dominio>/install.ps1 | iex             (Windows)
+//	curl -fsSL https://<domain>/install.sh | sh        (macOS/Linux)
+//	irm https://<domain>/install.ps1 | iex             (Windows)
 //
-// Gli script scaricano il binario dall'ultima GitHub Release (vedi .goreleaser.yaml).
+// The scripts download the binary from the latest GitHub Release (see .goreleaser.yaml).
 package main
 
 import (

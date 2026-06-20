@@ -1,5 +1,3 @@
-// Colori ANSI per l'output della CLI. Si disattivano da soli se stdout non è un
-// terminale (output rediretto/pipe) o se è impostata la variabile NO_COLOR.
 package main
 
 import "os"
@@ -27,5 +25,4 @@ func cYellow(s string) string { return paint("33", s) }
 func cBold(s string) string   { return paint("1", s) }
 func cDim(s string) string    { return paint("2", s) }
 
-// check è il segno di spunta verde usato per le conferme.
 func check() string { return cGreen("✓") }

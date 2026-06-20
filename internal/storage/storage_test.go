@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// tarOf costruisce un tar in memoria da una mappa path->contenuto.
+// tarOf builds an in-memory tar from a path->content map.
 func tarOf(files map[string]string) *tar.Reader {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
@@ -29,8 +29,7 @@ func newLocalT(t *testing.T) *local {
 	return l
 }
 
-// #5: l'estrazione si ferma oltre il tetto di byte (anche con gzip piccolo: qui
-// simuliamo abbassando il limite invece di generare 500 MiB).
+// Extraction stops past the byte cap (we lower the limit instead of generating 500 MiB).
 func TestPutSiteRejectsTooManyBytes(t *testing.T) {
 	defer func(v int64) { maxExtractBytes = v }(maxExtractBytes)
 	maxExtractBytes = 1024
@@ -40,11 +39,11 @@ func TestPutSiteRejectsTooManyBytes(t *testing.T) {
 		"big.bin": strings.Repeat("x", 4096),
 	}))
 	if err != errArchiveTooBig {
-		t.Fatalf("err = %v, voluto errArchiveTooBig", err)
+		t.Fatalf("err = %v, want errArchiveTooBig", err)
 	}
 }
 
-// #5: l'estrazione si ferma oltre il tetto sul numero di file.
+// Extraction stops past the file-count cap.
 func TestPutSiteRejectsTooManyFiles(t *testing.T) {
 	defer func(v int) { maxExtractFiles = v }(maxExtractFiles)
 	maxExtractFiles = 3
@@ -52,11 +51,10 @@ func TestPutSiteRejectsTooManyFiles(t *testing.T) {
 	files := map[string]string{"a.txt": "1", "b.txt": "2", "c.txt": "3", "d.txt": "4"}
 	l := newLocalT(t)
 	if err := l.PutSite("demo", tarOf(files)); err != errTooManyFiles {
-		t.Fatalf("err = %v, voluto errTooManyFiles", err)
+		t.Fatalf("err = %v, want errTooManyFiles", err)
 	}
 }
 
-// Un deploy entro i limiti passa e il file è leggibile.
 func TestPutSiteWithinLimits(t *testing.T) {
 	l := newLocalT(t)
 	if err := l.PutSite("demo", tarOf(map[string]string{"index.html": "ciao"})); err != nil {
@@ -69,6 +67,6 @@ func TestPutSiteWithinLimits(t *testing.T) {
 	defer rc.Close()
 	b, _ := io.ReadAll(rc)
 	if string(b) != "ciao" {
-		t.Fatalf("contenuto = %q", b)
+		t.Fatalf("content = %q", b)
 	}
 }

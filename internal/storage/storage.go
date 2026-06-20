@@ -1,6 +1,6 @@
-// Package storage astrae dove vivono i file dei siti e i metadata di policy:
-// su filesystem locale (bind mount) o su object storage S3-compatibile. Il
-// resto di quick-server lavora solo su Backend, ignaro di quale impl c'è sotto.
+// Package storage abstracts where site files and policy metadata live: local
+// filesystem (bind mount) or S3-compatible object storage. The rest of
+// quick-server works only against Backend, unaware of the implementation.
 package storage
 
 import (
@@ -17,54 +17,45 @@ import (
 	"time"
 )
 
-// ErrNotFound: file/oggetto inesistente (per il fallback try_files in serve).
 var ErrNotFound = errors.New("storage: not found")
 
-// Tetti anti-bomb applicati durante l'estrazione del tar: il limite sullo stream
-// gzip in ingresso non basta, perché un archivio piccolo può espandersi a
-// dismisura (gzip bomb) o contenere moltissimi file minuscoli.
-// var (non const) per poterli abbassare nei test senza generare archivi enormi.
+// Anti-bomb caps applied during tar extraction: limiting the incoming gzip
+// stream isn't enough, since a small archive can expand hugely (gzip bomb) or
+// hold a vast number of tiny files. var (not const) so tests can lower them
+// without generating enormous archives.
 var (
-	maxExtractBytes int64 = 500 << 20 // byte estratti totali (decompressi)
-	maxExtractFiles       = 20000     // numero massimo di file
+	maxExtractBytes int64 = 500 << 20 // total extracted (decompressed) bytes
+	maxExtractFiles       = 20000     // max number of files
 )
 
 var (
-	errArchiveTooBig = fmt.Errorf("storage: archivio troppo grande una volta estratto (oltre %d MiB)", maxExtractBytes>>20)
-	errTooManyFiles  = fmt.Errorf("storage: l'archivio supera il limite di %d file", maxExtractFiles)
+	errArchiveTooBig = fmt.Errorf("storage: archive too large once extracted (over %d MiB)", maxExtractBytes>>20)
+	errTooManyFiles  = fmt.Errorf("storage: archive exceeds the %d-file limit", maxExtractFiles)
 )
 
-// FileInfo accompagna un file aperto. Il content-type lo determina chi serve
-// (http.ServeContent) via estensione/sniff, qui basta nome+mtime+etag.
 type FileInfo struct {
 	Name    string
 	ModTime time.Time
 	ETag    string
 }
 
-// Backend è l'astrazione di storage condivisa da contenuti siti e metadata.
 type Backend interface {
-	// PutSite rimpiazza l'intero albero del sito col contenuto del tar,
-	// conservando la versione precedente per un eventuale Rollback.
+	// PutSite replaces the whole site tree with the tar contents, keeping the
+	// previous version for a possible Rollback.
 	PutSite(site string, tr *tar.Reader) error
-	// OpenFile apre un singolo file del sito; ErrNotFound se non esiste/è dir.
+	// OpenFile opens a single site file; ErrNotFound if missing or a dir.
 	OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error)
-	// DeleteSite rimuove contenuti e metadata del sito; existed=false se non c'era nulla.
+	// DeleteSite removes site contents and metadata; existed=false if nothing was there.
 	DeleteSite(site string) (existed bool, err error)
-	// SiteExists indica se il sito ha contenuti o metadata.
 	SiteExists(site string) (bool, error)
-	// ListSites elenca i nomi dei siti noti (contenuti o metadata).
 	ListSites() ([]string, error)
-	// Rollback riporta il sito alla versione precedente (l'ultimo deploy diventa
-	// la "prossima"). ok=false se non c'è una versione precedente da ripristinare.
+	// Rollback restores the previous version (the last deploy becomes the "next").
+	// ok=false if there is no previous version to restore.
 	Rollback(site string) (ok bool, err error)
-	// GetMeta restituisce il JSON di policy del sito (ok=false se assente).
 	GetMeta(site string) (data []byte, ok bool, err error)
-	// PutMeta salva il JSON di policy del sito.
 	PutMeta(site string, data []byte) error
 }
 
-// Config seleziona e configura il backend.
 type Config struct {
 	Kind     string // "local" | "s3"
 	SitesDir string // local
@@ -72,7 +63,6 @@ type Config struct {
 	S3       S3Config
 }
 
-// New costruisce il backend secondo Config.Kind.
 func New(c Config) (Backend, error) {
 	switch c.Kind {
 	case "", "local":
@@ -80,20 +70,20 @@ func New(c Config) (Backend, error) {
 	case "s3":
 		return newS3(c.S3)
 	default:
-		return nil, fmt.Errorf("storage: kind %q sconosciuto (usa local|s3)", c.Kind)
+		return nil, fmt.Errorf("storage: unknown kind %q (use local|s3)", c.Kind)
 	}
 }
 
-// cleanRel normalizza un path relativo e blocca il traversal.
+// cleanRel normalizes a relative path and blocks traversal.
 func cleanRel(p string) (string, error) {
 	rel := strings.TrimPrefix(path.Clean("/"+p), "/")
 	if rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", fmt.Errorf("storage: percorso non sicuro: %q", p)
+		return "", fmt.Errorf("storage: unsafe path: %q", p)
 	}
 	return rel, nil
 }
 
-// ---- backend locale (filesystem) ----
+// ---- local (filesystem) backend ----
 
 type local struct {
 	sitesDir string
@@ -150,8 +140,8 @@ func (l *local) PutSite(site string, tr *tar.Reader) error {
 			if err != nil {
 				return err
 			}
-			// Copia limitata al budget residuo (+1 per rilevare lo sforamento):
-			// una dimensione dichiarata falsa nell'header non può riempire il disco.
+			// Copy capped to the remaining budget (+1 to detect overflow): a
+			// lying size in the header can't fill the disk.
 			n, err := io.Copy(f, io.LimitReader(tr, maxExtractBytes-extracted+1))
 			f.Close()
 			if err != nil {
@@ -166,15 +156,15 @@ func (l *local) PutSite(site string, tr *tar.Reader) error {
 	final := filepath.Join(l.sitesDir, site)
 	prev := l.prevPath(site)
 	if _, err := os.Stat(final); err == nil {
-		// La versione attuale diventa la "precedente" (rollback a un livello):
-		// la penultima viene scartata.
+		// Current version becomes the "previous" one (one-level rollback): the
+		// older one is discarded.
 		os.RemoveAll(prev)
 		if err := os.Rename(final, prev); err != nil {
 			return err
 		}
 	}
 	if err := os.Rename(tmp, final); err != nil {
-		// ripristina la versione precedente se l'avevamo spostata
+		// restore the previous version if we had moved it
 		if _, e := os.Stat(prev); e == nil {
 			os.Rename(prev, final)
 		}
@@ -185,8 +175,8 @@ func (l *local) PutSite(site string, tr *tar.Reader) error {
 
 func (l *local) prevPath(site string) string { return filepath.Join(l.sitesDir, "."+site+".prev") }
 
-// tmpSeq rende unici i path temporanei: due operazioni concorrenti sullo stesso
-// sito (oltre al lock per-sito a monte) non condividono mai la stessa dir di lavoro.
+// tmpSeq makes temp paths unique: two concurrent operations on the same site
+// (beyond the per-site lock upstream) never share the same work dir.
 var tmpSeq atomic.Uint64
 
 func (l *local) uniqueTmp(site, kind string) string {
@@ -221,7 +211,7 @@ func (l *local) Rollback(site string) (bool, error) {
 	final := filepath.Join(l.sitesDir, site)
 	prev := l.prevPath(site)
 	if _, err := os.Stat(prev); err != nil {
-		return false, nil // niente versione precedente
+		return false, nil // no previous version
 	}
 	swap := l.uniqueTmp(site, "swap")
 	if _, err := os.Stat(final); err == nil {
@@ -230,10 +220,10 @@ func (l *local) Rollback(site string) (bool, error) {
 		}
 	}
 	if err := os.Rename(prev, final); err != nil {
-		os.Rename(swap, final) // ripristina
+		os.Rename(swap, final) // restore
 		return false, err
 	}
-	// L'ex-versione attuale diventa la nuova "precedente": un secondo rollback la rifà.
+	// The former current version becomes the new "previous": a second rollback redoes it.
 	if _, err := os.Stat(swap); err == nil {
 		os.Rename(swap, prev)
 	}
@@ -255,7 +245,12 @@ func (l *local) OpenFile(site, p string) (io.ReadSeekCloser, FileInfo, error) {
 		f.Close()
 		return nil, FileInfo{}, ErrNotFound
 	}
-	return f, FileInfo{Name: filepath.Base(full), ModTime: st.ModTime()}, nil
+	// Identity ETag (size + mtime). Without it the browser's conditional cache
+	// uses only If-Modified-Since, and after a Rollback (which restores files
+	// with an mtime older than the cached version) it would return 304 and show
+	// the wrong version. The ETag compares by content, not by date.
+	etag := fmt.Sprintf(`"%x-%x"`, st.Size(), st.ModTime().UnixNano())
+	return f, FileInfo{Name: filepath.Base(full), ModTime: st.ModTime(), ETag: etag}, nil
 }
 
 func (l *local) DeleteSite(site string) (bool, error) {

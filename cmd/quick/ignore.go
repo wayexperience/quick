@@ -1,16 +1,12 @@
-// Cosa entra nel mirror del deploy. Il piano (plan) è calcolato qui e condiviso
-// da deploy, --dry-run e status: un unico punto che decide quali file salgono.
+// Deploy mirror selection, shared by deploy, --dry-run and status. Three
+// cascading tiers decide what gets uploaded:
 //
-// Tre livelli, in cascata:
-//
-//	Tier 1  blocklist di sicurezza  — sempre, non scavalcabile: dotfile (tranne
-//	        .well-known) e materiale segreto (chiavi private, keystore). Anche
-//	        un .quickignore non può riammettere questi file.
-//	Tier 2  default di comodità      — node_modules, vendor, log, junk dell'OS.
-//	        Applicati in silenzio; scavalcabili pubblicando un .quickignore.
-//	Tier 3  .quickignore             — se presente, sostituisce il Tier 2 come
-//	        fonte di verità (sintassi gitignore, con negazione !). `quick ignore`
-//	        lo materializza con i default già dentro, pronti da modificare.
+//	Tier 1  security blocklist — always, never overridable: dotfiles (except
+//	        .well-known) and secrets. Even a .quickignore cannot re-include these.
+//	Tier 2  convenience defaults — node_modules, vendor, logs, OS junk. Silent;
+//	        overridden by publishing a .quickignore.
+//	Tier 3  .quickignore — if present, replaces Tier 2 as the source of truth
+//	        (gitignore syntax, with ! negation).
 package main
 
 import (
@@ -25,8 +21,8 @@ import (
 
 const quickignoreName = ".quickignore"
 
-// tier1Secrets: estensioni/nomi che non devono MAI lasciare la macchina, anche
-// senza punto iniziale. Confrontati sul solo basename, case-insensitive.
+// extensions/names that must NEVER leave the machine, even without a leading
+// dot. Matched on the basename, case-insensitive.
 var tier1SecretExt = []string{
 	".pem", ".key", ".p12", ".pfx", ".ppk", ".kdbx",
 }
@@ -34,8 +30,8 @@ var tier1SecretNames = []string{
 	"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
 }
 
-// tier2Defaults: esclusioni di comodità (sintassi gitignore). Sono anche il
-// contenuto che `quick ignore` scrive nel .quickignore di esempio.
+// convenience exclusions; also the contents `quick ignore` writes into the
+// sample .quickignore.
 var tier2Defaults = []string{
 	"node_modules/",
 	"vendor/",
@@ -47,14 +43,11 @@ var tier2Defaults = []string{
 	"desktop.ini",
 }
 
-// planFile è un file che entra nel deploy, con la sua dimensione.
 type planFile struct {
-	rel  string // path relativo, separatori slash
+	rel  string // relative path, slash-separated
 	size int64
 }
 
-// plan è il risultato del calcolo: cosa sale, quanto pesa, quanti esclusi e se
-// le regole vengono da un .quickignore pubblicato.
 type plan struct {
 	files          []planFile
 	excluded       int
@@ -62,11 +55,11 @@ type plan struct {
 	hasQuickignore bool
 }
 
-// buildPlan cammina la cartella e applica i tre livelli di esclusione.
+// buildPlan walks the folder and applies the three exclusion tiers.
 func buildPlan(dir string) (*plan, error) {
 	p := &plan{}
 
-	// Tier 2/3: un .quickignore presente sostituisce i default integrati.
+	// Tier 2/3: a present .quickignore replaces the built-in defaults.
 	var soft *gitignore.GitIgnore
 	if lines, ok := readQuickignore(dir); ok {
 		p.hasQuickignore = true
@@ -88,8 +81,8 @@ func buildPlan(dir string) (*plan, error) {
 		}
 		rel = filepath.ToSlash(rel)
 
-		// Tier 1: dotfile (tranne .well-known) e segreti. Su una cartella
-		// esclusa potiamo l'intero sottoalbero.
+		// Tier 1: dotfiles (except .well-known) and secrets; prune the whole
+		// subtree on an excluded directory.
 		if tier1Blocked(rel, fi.IsDir()) {
 			if fi.IsDir() {
 				return filepath.SkipDir
@@ -98,7 +91,6 @@ func buildPlan(dir string) (*plan, error) {
 			return nil
 		}
 
-		// Tier 2/3.
 		match := rel
 		if fi.IsDir() {
 			match += "/"
@@ -123,9 +115,9 @@ func buildPlan(dir string) (*plan, error) {
 	return p, nil
 }
 
-// tier1Blocked applica la blocklist di sicurezza, non scavalcabile.
+// tier1Blocked applies the non-overridable security blocklist.
 func tier1Blocked(rel string, isDir bool) bool {
-	// dotfile in qualunque componente del path, tranne .well-known.
+	// dotfile in any path component, except .well-known.
 	for part := range strings.SplitSeq(rel, "/") {
 		if strings.HasPrefix(part, ".") && part != ".well-known" {
 			return true
@@ -146,8 +138,8 @@ func tier1Blocked(rel string, isDir bool) bool {
 	return false
 }
 
-// readQuickignore legge le righe del .quickignore della cartella (ok=false se
-// assente o vuoto di regole effettive).
+// readQuickignore returns the folder's .quickignore rules; ok=false if absent
+// or empty of effective rules.
 func readQuickignore(dir string) (lines []string, ok bool) {
 	b, err := os.ReadFile(filepath.Join(dir, quickignoreName))
 	if err != nil {
@@ -162,13 +154,11 @@ func readQuickignore(dir string) (lines []string, ok bool) {
 	return lines, len(lines) > 0
 }
 
-// quickignoreTemplate è il file scritto da `quick ignore`: i default del Tier 2
-// resi visibili e modificabili. Il Tier 1 (segreti) resta sempre attivo a parte.
 func quickignoreTemplate() string {
 	var b strings.Builder
-	b.WriteString("# .quickignore — file che NON vengono pubblicati col deploy.\n")
-	b.WriteString("# Sintassi gitignore: una regola per riga, ! per riammettere.\n")
-	b.WriteString("# (chiavi private, .env e i dotfile restano sempre esclusi, anche senza elencarli.)\n\n")
+	b.WriteString("# .quickignore — files that are NOT published with the deploy.\n")
+	b.WriteString("# gitignore syntax: one rule per line, ! to re-include.\n")
+	b.WriteString("# (private keys, .env and dotfiles always stay excluded, even without listing them.)\n\n")
 	for _, d := range tier2Defaults {
 		b.WriteString(d)
 		b.WriteByte('\n')
@@ -176,8 +166,8 @@ func quickignoreTemplate() string {
 	return b.String()
 }
 
-// writeQuickignore materializza il template nella cartella (non sovrascrive uno
-// esistente). Restituisce il path scritto, o "" se c'era già.
+// writeQuickignore writes the template into the folder, never overwriting an
+// existing one. Returns the path written, or "" if one already existed.
 func writeQuickignore(dir string) (string, error) {
 	dst := filepath.Join(dir, quickignoreName)
 	if _, err := os.Stat(dst); err == nil {
@@ -189,35 +179,38 @@ func writeQuickignore(dir string) (string, error) {
 	return dst, nil
 }
 
-// ignoreSource descrive a parole da dove vengono le regole di esclusione.
 func (p *plan) ignoreSource() string {
 	if p.hasQuickignore {
 		return ".quickignore"
 	}
-	return "regole predefinite"
+	return "default rules"
 }
 
-// printPlan elenca cosa verrebbe pubblicato (usato da --dry-run).
 func printPlan(name string, p *plan) {
-	fmt.Printf("Deploy di %q — anteprima (niente è stato pubblicato):\n", name)
-	fmt.Printf("  %d file, %s (esclusioni: %s)\n", len(p.files), humanSize(p.totalSize), p.ignoreSource())
+	fmt.Printf("Deploy of %q — preview (nothing was published):\n", name)
+	fmt.Printf("  %s, %s (excluded by: %s)\n", plural(len(p.files), "file", "files"), humanSize(p.totalSize), p.ignoreSource())
 	if p.excluded > 0 {
-		fmt.Printf("  %d file/cartelle esclusi\n", p.excluded)
+		fmt.Printf("  %s excluded\n", plural(p.excluded, "file/folder", "files/folders"))
 	}
 	for _, f := range p.files {
 		fmt.Printf("    %s  %s\n", humanSize(f.size), f.rel)
 	}
 }
 
-// confirmDeploy stampa il riepilogo e chiede conferma. Salta la domanda con
-// --yes; senza un terminale interattivo (script) rifiuta a meno di --yes, per
-// non sostituire un sito per sbaglio in automatico.
-func confirmDeploy(name string, cfg *cliConfig, p *plan, yes bool) bool {
+// confirmDeploy prints the summary and asks for confirmation. Skips the prompt
+// with --yes; without an interactive terminal (scripts) it refuses unless --yes,
+// so a site is never replaced by accident in automation. exists distinguishes a
+// first publish from a destructive replace.
+func confirmDeploy(name string, cfg *cliConfig, p *plan, exists, yes bool) bool {
 	url := "https://" + name + "." + cfg.BaseDomain
-	fmt.Printf("Sto per sostituire l'intero contenuto di %s\n", url)
-	fmt.Printf("  %d file, %s (esclusioni: %s", len(p.files), humanSize(p.totalSize), p.ignoreSource())
+	if exists {
+		fmt.Printf("About to replace the entire contents of %s\n", url)
+	} else {
+		fmt.Printf("About to publish %s\n", url)
+	}
+	fmt.Printf("  %s, %s (excluded by: %s", plural(len(p.files), "file", "files"), humanSize(p.totalSize), p.ignoreSource())
 	if p.excluded > 0 {
-		fmt.Printf(", %d esclusi", p.excluded)
+		fmt.Printf(", %d excluded", p.excluded)
 	}
 	fmt.Println(")")
 
@@ -225,28 +218,36 @@ func confirmDeploy(name string, cfg *cliConfig, p *plan, yes bool) bool {
 		return true
 	}
 	if !stdinIsTTY() {
-		fmt.Fprintln(os.Stderr, "rifiutato: non interattivo. Riesegui con --yes per confermare.")
+		fmt.Fprintln(os.Stderr, "refused: not interactive. Re-run with --yes to confirm.")
 		return false
 	}
-	fmt.Print("Procedo? [s/N]: ")
+	fmt.Print("Proceed? [y/N]: ")
 	return yesNo(readLine())
 }
 
-// confirmOverwrite chiede di ridigitare il nome del sito quando l'ultimo deploy
-// è di un'altra persona, per non sovrascriverne il lavoro per sbaglio.
+// confirmOverwrite requires retyping the site name when the last deploy was by
+// someone else, to avoid overwriting their work by mistake.
 func confirmOverwrite(name, lastBy string) bool {
 	fmt.Println()
-	fmt.Printf("%s Il sito %s è stato aggiornato l'ultima volta da %s\n",
+	fmt.Printf("%s Site %s was last updated by %s\n",
 		cYellow("!"), cBold(cYellow("'"+name+"'")), cBold(localPart(lastBy)))
 	if !stdinIsTTY() {
-		fmt.Fprintln(os.Stderr, "rifiutato: non interattivo. Riesegui con --yes per confermare.")
+		fmt.Fprintln(os.Stderr, "refused: not interactive. Re-run with --yes to confirm.")
 		return false
 	}
-	fmt.Printf("%s Digita %s per confermare la sovrascrittura: ", cGreen("?"), cBold("'"+name+"'"))
+	fmt.Printf("%s Type %s to confirm the overwrite: ", cGreen("?"), cBold("'"+name+"'"))
 	return readLine() == name
 }
 
-// humanSize formatta una dimensione in byte in modo leggibile.
+// plural renders a count with the right singular/plural noun (e.g. "1 file",
+// "3 files").
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
 func humanSize(n int64) string {
 	const unit = 1024
 	if n < unit {
@@ -260,7 +261,6 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-// stdinIsTTY indica se stdin è un terminale interattivo.
 func stdinIsTTY() bool {
 	fi, err := os.Stdin.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0

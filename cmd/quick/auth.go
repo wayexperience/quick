@@ -1,8 +1,3 @@
-// Login Google per la CLI: flusso OAuth "loopback" con PKCE (apre il browser,
-// cattura il code su 127.0.0.1, lo scambia per un ID token). Nessun
-// client_secret embeddato: il client_id arriva dalla config del server e si usa
-// PKCE (richiede un client OAuth di tipo "Desktop app"). ID token e refresh
-// token sono salvati in ~/.config/quick/token.json.
 package main
 
 import (
@@ -62,12 +57,12 @@ func saveToken(t *tokenSet) error {
 	return os.WriteFile(p, b, 0o600)
 }
 
-// idToken restituisce un ID token valido: cache, poi refresh, poi login interattivo.
+// idToken returns a valid ID token: cache, then refresh, then interactive login.
 func idToken(cfg *cliConfig) (string, error) {
 	if tok, ok := silentToken(cfg); ok {
 		return tok, nil
 	}
-	fmt.Fprintln(os.Stderr, "Non sei autenticato: eseguo il login.")
+	fmt.Fprintln(os.Stderr, "Not authenticated: logging in.")
 	nt, err := login(cfg)
 	if err != nil {
 		return "", err
@@ -75,15 +70,15 @@ func idToken(cfg *cliConfig) (string, error) {
 	return nt.IDToken, nil
 }
 
-// haveLogin indica se esiste un login salvato (senza rete): basta un ID token o
-// un refresh token in cache. Per la panoramica veloce, non verifica la scadenza.
+// haveLogin reports whether a saved login exists, without network or checking
+// expiry; for the quick overview.
 func haveLogin() bool {
 	t, err := loadToken()
 	return err == nil && (t.IDToken != "" || t.RefreshToken != "")
 }
 
-// silentToken prova a fornire un ID token senza interazione: usa la cache e, se
-// scaduta, il refresh token. ok=false se servirebbe un login interattivo.
+// silentToken returns an ID token without interaction (cache, then refresh).
+// ok=false when an interactive login would be needed.
 func silentToken(cfg *cliConfig) (string, bool) {
 	t, err := loadToken()
 	if err != nil {
@@ -110,7 +105,6 @@ func silentToken(cfg *cliConfig) (string, bool) {
 	return "", false
 }
 
-// login esegue il flusso interattivo PKCE e salva il token.
 func login(cfg *cliConfig) (*tokenSet, error) {
 	state := randState()
 	verifier, challenge := pkcePair()
@@ -118,7 +112,7 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 
 	ln, err := net.Listen("tcp", "127.0.0.1:8765")
 	if err != nil {
-		return nil, fmt.Errorf("porta 8765 occupata (%w)", err)
+		return nil, fmt.Errorf("port 8765 already in use (%w)", err)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +127,7 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 			errCh <- errors.New(e)
 			return
 		}
-		fmt.Fprintln(w, "Login completato. Torna al terminale.")
+		fmt.Fprintln(w, "Login complete. Return to the terminal.")
 		codeCh <- q.Get("code")
 	})
 	srv := &http.Server{Handler: mux}
@@ -151,15 +145,15 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 		"code_challenge_method": {"S256"},
 		"state":                 {state},
 	}
-	// `hd` restringe il selettore Google a un dominio: ha senso solo con un
-	// singolo dominio (non con "*" o una lista).
+	// `hd` restricts the Google account picker to one domain; only meaningful
+	// for a single domain (not "*" or a list).
 	if hd := cfg.HostedDomain; hd != "" && hd != "*" && !strings.Contains(hd, ",") {
 		q.Set("hd", hd)
 	}
 	authURL := authEndpoint + "?" + q.Encode()
 
-	fmt.Println("Apro il browser per il login Google…")
-	fmt.Println("Se non si apre, apri tu:\n  " + authURL)
+	fmt.Println("Opening the browser for Google login…")
+	fmt.Println("If it doesn't open, open it yourself:\n  " + authURL)
 	openBrowser(authURL)
 
 	var code string
@@ -168,7 +162,7 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 	case err = <-errCh:
 		return nil, err
 	case <-time.After(3 * time.Minute):
-		return nil, errors.New("timeout login")
+		return nil, errors.New("login timed out")
 	}
 
 	v := url.Values{
@@ -186,8 +180,8 @@ func login(cfg *cliConfig) (*tokenSet, error) {
 	return t, saveToken(t)
 }
 
-// withSecret aggiunge il client_secret allo scambio token solo se il server ne
-// ha fornito uno (client OAuth di tipo Web riusato per la CLI).
+// withSecret adds client_secret to the token exchange only if the server
+// provided one (a Web-type OAuth client reused for the CLI).
 func withSecret(v url.Values, cfg *cliConfig) {
 	if cfg.OAuthClientSecret != "" {
 		v.Set("client_secret", cfg.OAuthClientSecret)
@@ -212,7 +206,7 @@ func tokenRequest(v url.Values) (*tokenSet, error) {
 		return nil, fmt.Errorf("%s: %s", r.Error, r.ErrorDesc)
 	}
 	if r.IDToken == "" {
-		return nil, errors.New("nessun id_token nella risposta")
+		return nil, errors.New("no id_token in the response")
 	}
 	return &tokenSet{
 		IDToken:      r.IDToken,
@@ -221,7 +215,6 @@ func tokenRequest(v url.Values) (*tokenSet, error) {
 	}, nil
 }
 
-// pkcePair genera (code_verifier, code_challenge S256).
 func pkcePair() (verifier, challenge string) {
 	b := make([]byte, 32)
 	rand.Read(b)
@@ -248,8 +241,8 @@ func randState() string {
 	return hex.EncodeToString(b)
 }
 
-// emailFromToken legge la claim "email" dal payload di un ID token (JWT) senza
-// verificarne la firma: serve solo a mostrare/identificare chi sei localmente.
+// emailFromToken reads the "email" claim from an ID token (JWT) payload without
+// verifying the signature: only used to display who you are locally.
 func emailFromToken(idtok string) string {
 	parts := strings.Split(idtok, ".")
 	if len(parts) != 3 {
@@ -266,7 +259,6 @@ func emailFromToken(idtok string) string {
 	return c.Email
 }
 
-// localPart è la parte prima della @ di un'email (per un'etichetta breve).
 func localPart(email string) string {
 	if i := strings.IndexByte(email, '@'); i > 0 {
 		return email[:i]

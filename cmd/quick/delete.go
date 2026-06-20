@@ -1,7 +1,3 @@
-// quick delete <sito>: elimina definitivamente un sito (contenuti + metadata).
-// L'operazione è irreversibile, quindi chiede conferma; se il sito non è dietro
-// l'SSO (pubblico o protetto da codice) richiede di ridigitarne il nome. Se il
-// sito è bloccato, il server consente l'eliminazione solo all'owner.
 package main
 
 import (
@@ -25,11 +21,11 @@ func deleteCmd(args []string) {
 	}
 
 	fs := flag.NewFlagSet("delete", flag.ExitOnError)
-	server := fs.String("server", "", "URL del server (o QUICK_SERVER)")
-	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "ID token Google (default: login salvato)")
+	server := fs.String("server", "", "server URL (or QUICK_SERVER)")
+	token := fs.String("token", os.Getenv("QUICK_TOKEN"), "Google ID token (default: saved login)")
 	fs.Parse(args)
 	if name == "" && fs.NArg() > 0 {
-		name = fs.Arg(0) // posizionale messo dopo i flag
+		name = fs.Arg(0) // positional placed after the flags
 	}
 
 	sf := loadSiteFile(".")
@@ -37,9 +33,9 @@ func deleteCmd(args []string) {
 		name = sf.Name
 	}
 	if name == "" {
-		fatal(errors.New("manca il nome del sito (o esegui in una cartella con .quick)"))
+		fatal(errors.New("missing site name (or run inside a folder with a .quick file)"))
 	}
-	if !confirmSiteMismatch(sf, name, "eliminare") {
+	if !confirmSiteMismatch(sf, name, "delete") {
 		return
 	}
 
@@ -57,42 +53,40 @@ func deleteCmd(args []string) {
 		}
 	}
 
-	// Stato attuale: serve a sapere se esiste, se è bloccato e con che accesso
-	// (per decidere il livello di conferma).
+	// current state drives the confirmation level (exists, locked, access)
 	pol := fetchPolicy(cfg, name, tok)
 	if !pol.Exists {
-		fatal(fmt.Errorf("sito %q non trovato", name))
+		fatal(fmt.Errorf("site %q not found", name))
 	}
 
 	siteURL := "https://" + name + "." + cfg.BaseDomain
-	fmt.Fprintf(os.Stderr, "\n  ⚠️  stai per ELIMINARE definitivamente il sito\n      %s  (%s)\n", name, siteURL)
+	fmt.Fprintf(os.Stderr, "\n  ⚠️  you are about to permanently DELETE the site\n      %s  (%s)\n", name, siteURL)
 	if pol.Locked {
-		fmt.Fprintf(os.Stderr, "      bloccato da %s\n", pol.Owner)
+		fmt.Fprintf(os.Stderr, "      locked by %s\n", pol.Owner)
 	}
-	fmt.Fprintf(os.Stderr, "      i file vengono rimossi e l'operazione non è reversibile.\n\n")
+	fmt.Fprintf(os.Stderr, "      the files are removed and the operation is not reversible.\n\n")
 
 	if pol.Access == quick.AccessPublic || pol.Access == quick.AccessCode {
-		label := "pubblico"
+		label := "public"
 		if pol.Access == quick.AccessCode {
-			label = "protetto da codice"
+			label = "protected by code"
 		}
-		fmt.Fprintf(os.Stderr, "  Il sito è %s. Per confermare, ridigita il suo nome (%s): ", label, name)
+		fmt.Fprintf(os.Stderr, "  The site is %s. To confirm, retype its name (%s): ", label, name)
 		if readLine() != name {
-			fatal(errors.New("nome non corrispondente: eliminazione annullata"))
+			fatal(errors.New("name does not match: deletion cancelled"))
 		}
 	} else {
-		fmt.Fprint(os.Stderr, "  Confermi l'eliminazione? [s/N]: ")
+		fmt.Fprint(os.Stderr, "  Confirm deletion? [y/N]: ")
 		if !yesNo(readLine()) {
-			fmt.Fprintln(os.Stderr, "annullato")
+			fmt.Fprintln(os.Stderr, "cancelled")
 			return
 		}
 	}
 
 	callDelete(cfg, name, tok)
-	fmt.Printf("✓ %s eliminato\n", name)
+	fmt.Printf("✓ %s deleted\n", name)
 }
 
-// fetchPolicy legge lo stato corrente del sito via GET /api/site/<name>/policy.
 func fetchPolicy(cfg *cliConfig, name, tok string) quick.PolicyResponse {
 	endpoint := cfg.Server + "/api/site/" + url.PathEscape(name) + "/policy"
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -104,7 +98,7 @@ func fetchPolicy(cfg *cliConfig, name, tok string) quick.PolicyResponse {
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "impossibile leggere lo stato (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
+		fmt.Fprintf(os.Stderr, "cannot read status (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
 		os.Exit(1)
 	}
 	var p quick.PolicyResponse
@@ -112,7 +106,6 @@ func fetchPolicy(cfg *cliConfig, name, tok string) quick.PolicyResponse {
 	return p
 }
 
-// callDelete esegue DELETE /api/site/<name>.
 func callDelete(cfg *cliConfig, name, tok string) {
 	endpoint := cfg.Server + "/api/site/" + url.PathEscape(name)
 	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
@@ -124,7 +117,7 @@ func callDelete(cfg *cliConfig, name, tok string) {
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "eliminazione fallita (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
+		fmt.Fprintf(os.Stderr, "deletion failed (%d): %s\n", resp.StatusCode, strings.TrimSpace(string(rb)))
 		os.Exit(1)
 	}
 }

@@ -1,7 +1,3 @@
-// .quick: file di progetto scritto nella cartella corrente al primo deploy, col
-// minimo per ripetere i comandi senza parametri (nome del sito, server e la
-// sottocartella pubblicata). NON viene caricato nel deploy (escluso dal tarball,
-// è un dotfile), quindi non finisce servito sul sito.
 package main
 
 import (
@@ -16,7 +12,7 @@ const siteFileName = ".quick"
 type siteFile struct {
 	Name   string `json:"name"`
 	Server string `json:"server,omitempty"`
-	Dir    string `json:"dir,omitempty"` // sottocartella da pubblicare (relativa); vuoto = "."
+	Dir    string `json:"dir,omitempty"` // published subfolder (relative); empty = "."
 }
 
 func loadSiteFile(dir string) *siteFile {
@@ -36,18 +32,18 @@ func saveSiteFile(dir string, sf siteFile) {
 	_ = os.WriteFile(filepath.Join(dir, siteFileName), append(b, '\n'), 0o644)
 }
 
-// confirmSiteMismatch avvisa quando la cartella corrente è collegata (via .quick)
-// a un sito diverso da quello su cui il comando sta per agire, e chiede conferma.
-// verb è l'azione da mostrare, es. "fare deploy su", "modificare", "eliminare".
-// Restituisce false se l'utente annulla.
+// confirmSiteMismatch asks for confirmation when the current folder is linked
+// (via .quick) to a site different from the one the command will act on. verb is
+// the action shown (e.g. "deploy to", "modify", "delete"). Returns false if
+// the user cancels.
 func confirmSiteMismatch(sf *siteFile, name, verb string) bool {
 	if sf == nil || sf.Name == "" || sf.Name == name {
 		return true
 	}
-	fmt.Fprintf(os.Stderr, "⚠️  questa cartella è collegata al sito %q (.quick), ma stai per %s %q.\n", sf.Name, verb, name)
-	fmt.Fprint(os.Stderr, "Procedo lo stesso? [s/N]: ")
+	fmt.Fprintf(os.Stderr, "⚠️  this folder is linked to site %q (.quick), but you are about to %s %q.\n", sf.Name, verb, name)
+	fmt.Fprint(os.Stderr, "Proceed anyway? [y/N]: ")
 	if !yesNo(readLine()) {
-		fmt.Fprintln(os.Stderr, "annullato")
+		fmt.Fprintln(os.Stderr, "cancelled")
 		return false
 	}
 	return true

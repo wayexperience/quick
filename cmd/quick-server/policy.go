@@ -1,6 +1,6 @@
-// Policy per-sito: lock, accesso pubblico, accesso con codice. Persistite via
-// storage.Backend (file locale o S3) con una piccola cache TTL davanti, perché
-// la load è sul hot-path di ogni richiesta servita.
+// Per-site policy: lock, public access, code access. Persisted via
+// storage.Backend (local file or S3) with a small TTL cache in front, since load
+// is on the hot path of every served request.
 package main
 
 import (
@@ -24,29 +24,27 @@ import (
 	"github.com/zupolgec/quick/internal/storage"
 )
 
-// codeAccessTTL: durata del cookie di accesso a un sito con codice.
 const codeAccessTTL = 7 * 24 * time.Hour
 
-// Azioni di scrittura soggette al controllo di ownership.
+// Write actions subject to ownership checks.
 const (
 	actDeploy = "deploy"
 	actDelete = "delete"
 	actPolicy = "policy"
 )
 
-// nowStamp è il formato dei timestamp salvati nei metadata.
 func nowStamp() string { return time.Now().UTC().Format(time.RFC3339) }
 
-// canWrite decide se email può eseguire action sul sito con metadata p, secondo
-// la modalità di ownership (QUICK_OWNERSHIP) e l'eventuale lock esplicito. Il
-// lock ha sempre la precedenza; poi:
+// canWrite decides whether email may run action on the site with metadata p,
+// per the ownership mode (QUICK_OWNERSHIP) and any explicit lock. The lock
+// always wins; then:
 //
-//	free   (default) chiunque può tutto
-//	shared           chiunque può deploy; solo il creatore elimina/cambia visibilità
-//	owned            solo il creatore può tutto
+//	free   (default) anyone can do anything
+//	shared           anyone can deploy; only the creator deletes/changes visibility
+//	owned            only the creator can do anything
 func (s *server) canWrite(p policy, email, action string) (bool, string) {
 	if p.Locked && p.Owner != "" && p.Owner != email {
-		return false, "sito bloccato da " + p.Owner
+		return false, "site locked by " + p.Owner
 	}
 	creatorOnly := false
 	switch s.ownership {
@@ -56,22 +54,20 @@ func (s *server) canWrite(p policy, email, action string) (bool, string) {
 		creatorOnly = action != actDeploy
 	}
 	if creatorOnly && p.CreatedBy != "" && p.CreatedBy != email {
-		return false, "sito di " + p.CreatedBy + " (modalità " + s.ownership + ")"
+		return false, "site owned by " + p.CreatedBy + " (" + s.ownership + " mode)"
 	}
 	return true, ""
 }
 
-// policy è lo stato per-sito persistito (JSON) nello storage: visibilità, lock e
-// tracciamento di chi/quando ha creato e aggiornato il sito.
 type policy struct {
-	CreatedBy string `json:"created_by,omitempty"` // email del creatore (primo deploy)
-	CreatedAt string `json:"created_at,omitempty"` // RFC3339
-	UpdatedBy string `json:"updated_by,omitempty"` // email dell'ultimo deploy
-	UpdatedAt string `json:"updated_at,omitempty"` // RFC3339
-	Owner     string `json:"owner,omitempty"`      // owner del lock (set da lock)
-	Locked    bool   `json:"locked,omitempty"`     // solo l'owner può deploy/policy
-	Access    string `json:"access,omitempty"`     // "" = SSO | "public" | "code"
-	CodeHash  string `json:"code_hash,omitempty"`  // HMAC del codice (mai in chiaro)
+	CreatedBy string `json:"created_by,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedBy string `json:"updated_by,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	Owner     string `json:"owner,omitempty"`     // lock owner
+	Locked    bool   `json:"locked,omitempty"`    // only the owner can deploy/policy
+	Access    string `json:"access,omitempty"`    // "" = SSO | "public" | "code"
+	CodeHash  string `json:"code_hash,omitempty"` // HMAC of the code, never plaintext
 }
 
 type cachedPolicy struct {
@@ -91,11 +87,11 @@ func newMetaStore(be storage.Backend, secret []byte, ttl time.Duration) *metaSto
 	return &metaStore{be: be, secret: secret, ttl: ttl, cache: map[string]cachedPolicy{}}
 }
 
-// load restituisce la policy del sito. Distingue tre casi: metadata assenti
-// (policy vuota legittima, si cacha), metadata presenti e validi (si cachano),
-// errore di storage o JSON corrotto (errore propagato e NON cachato). I caller
-// sul path di scrittura/servizio devono trattare l'errore come fail-closed:
-// una policy vuota per errore farebbe sparire lock e proprietà (ownership bypass).
+// load returns the site policy. It distinguishes three cases: missing metadata
+// (legitimately empty policy, cached), present and valid (cached), storage error
+// or corrupt JSON (error propagated and NOT cached). Callers on the
+// write/serve path must treat the error as fail-closed: an empty policy from an
+// error would drop lock and ownership (ownership bypass).
 func (m *metaStore) load(site string) (policy, error) {
 	if !quick.ValidName(site) {
 		return policy{}, nil
@@ -114,7 +110,7 @@ func (m *metaStore) load(site string) (policy, error) {
 	var p policy
 	if ok {
 		if err := json.Unmarshal(b, &p); err != nil {
-			return policy{}, fmt.Errorf("metadata di %q illeggibili: %w", site, err)
+			return policy{}, fmt.Errorf("could not read metadata for %q: %w", site, err)
 		}
 	}
 	m.mu.Lock()
@@ -125,7 +121,7 @@ func (m *metaStore) load(site string) (policy, error) {
 
 func (m *metaStore) save(site string, p policy) error {
 	if !quick.ValidName(site) {
-		return errors.New("nome sito non valido")
+		return errors.New("invalid site name")
 	}
 	b, _ := json.MarshalIndent(p, "", "  ")
 	if err := m.be.PutMeta(site, b); err != nil {
@@ -137,7 +133,6 @@ func (m *metaStore) save(site string, p policy) error {
 	return nil
 }
 
-// forget invalida la cache per un sito (es. dopo l'eliminazione).
 func (m *metaStore) forget(site string) {
 	m.mu.Lock()
 	delete(m.cache, site)
@@ -157,7 +152,7 @@ func (m *metaStore) checkCode(p policy, code string) bool {
 	return hmac.Equal([]byte(p.CodeHash), []byte(m.hashCode(code)))
 }
 
-// signAccess produce il valore del cookie di accesso: "<scadenza>.<firma>".
+// signAccess builds the access cookie value: "<expiry>.<signature>".
 func (m *metaStore) signAccess(sub string, exp int64) string {
 	mac := hmac.New(sha256.New, m.secret)
 	mac.Write([]byte(sub + "|" + strconv.FormatInt(exp, 10)))
@@ -176,7 +171,7 @@ func (m *metaStore) validAccessCookie(sub, val string) bool {
 	return hmac.Equal([]byte(m.signAccess(sub, exp)), []byte(val))
 }
 
-// subOf estrae il sottodominio di primo livello da un host del dominio base.
+// subOf extracts the first-level subdomain of a base-domain host.
 // "foo.quick.example.com" + "quick.example.com" -> "foo".
 func subOf(host, base string) string {
 	host, _, _ = strings.Cut(host, ":")
@@ -194,8 +189,8 @@ func fwdHost(r *http.Request) string {
 	return r.Host
 }
 
-// checkSSO interroga oauth2-proxy /oauth2/auth (202 = sessione valida) rigirando
-// il cookie della richiesta.
+// checkSSO asks oauth2-proxy /oauth2/auth (202 = valid session), forwarding the
+// request cookie.
 func (s *server) checkSSO(r *http.Request) (string, bool) {
 	if s.noAuth {
 		return "dev@" + def(s.domain, "example.com"), true
@@ -219,13 +214,13 @@ func (s *server) checkSSO(r *http.Request) (string, bool) {
 	return resp.Header.Get("X-Auth-Request-Email"), true
 }
 
-// redirect manda il browser a path (sign_in o pagina codice) con ?rd= all'URL corrente.
+// redirect sends the browser to path (sign_in or code page) with ?rd= set to the
+// current URL.
 func (s *server) redirect(w http.ResponseWriter, r *http.Request, host, path string) {
 	rd := "https://" + host + r.URL.RequestURI()
 	http.Redirect(w, r, path+"?rd="+url.QueryEscape(rd), http.StatusFound)
 }
 
-// handleCodePage serve e processa la pagina di inserimento codice (/__quick/code).
 func (s *server) handleCodePage(w http.ResponseWriter, r *http.Request) {
 	host := fwdHost(r)
 	sub := subOf(host, s.baseDomain)
@@ -235,7 +230,7 @@ func (s *server) handleCodePage(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.meta.load(sub)
 	if err != nil {
-		http.Error(w, "sito temporaneamente non disponibile", http.StatusServiceUnavailable)
+		http.Error(w, "site temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if p.Access != "code" {
@@ -246,9 +241,10 @@ func (s *server) handleCodePage(w http.ResponseWriter, r *http.Request) {
 	if !safeRedirect(rd, host) {
 		rd = "https://" + host + "/"
 	}
+	l := pickLang(r)
 	if r.Method == http.MethodPost {
 		if !s.meta.checkCode(p, r.FormValue("code")) {
-			renderCodeForm(w, host, rd, true)
+			renderCodeForm(w, l, host, rd, true)
 			return
 		}
 		exp := time.Now().Add(codeAccessTTL).Unix()
@@ -264,10 +260,10 @@ func (s *server) handleCodePage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, rd, http.StatusFound)
 		return
 	}
-	renderCodeForm(w, host, rd, false)
+	renderCodeForm(w, l, host, rd, false)
 }
 
-// safeRedirect ammette solo URL https dello stesso host o path relativi.
+// safeRedirect only allows same-host https URLs or relative paths.
 func safeRedirect(rd, host string) bool {
 	if rd == "" {
 		return false
@@ -282,9 +278,6 @@ func safeRedirect(rd, host string) bool {
 	return u.Scheme == "https" && u.Host == host
 }
 
-// handleSiteAPI instrada /api/site/<name>[/policy]:
-//   - GET|POST|PATCH .../policy  -> handlePolicy (leggi/muta la policy)
-//   - DELETE /api/site/<name>    -> handleDelete (elimina il sito)
 func (s *server) handleSiteAPI(w http.ResponseWriter, r *http.Request) {
 	name, action, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/site/"), "/")
 	if !quick.ValidName(name) {
@@ -303,8 +296,6 @@ func (s *server) handleSiteAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleRollback riporta il sito alla versione precedente. Auth con ID token
-// Google; stessa regola di scrittura del deploy.
 func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name string) {
 	email, err := s.authenticate(r)
 	if err != nil {
@@ -315,7 +306,7 @@ func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name str
 	defer unlock()
 	cur, err := s.meta.load(name)
 	if err != nil {
-		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "could not read site state: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	if ok, reason := s.canWrite(cur, email, actDeploy); !ok {
@@ -328,23 +319,21 @@ func (s *server) handleRollback(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	if !ok {
-		http.Error(w, "nessuna versione precedente da ripristinare", http.StatusNotFound)
+		http.Error(w, "no previous version to restore", http.StatusNotFound)
 		return
 	}
 	cur.UpdatedBy, cur.UpdatedAt = email, nowStamp()
 	if err := s.meta.save(name, cur); err != nil {
-		log.Printf("ATTENZIONE: rollback %q applicato ma salvataggio metadata fallito: %v", name, err)
-		http.Error(w, "rollback applicato ma salvataggio stato fallito: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("WARNING: rollback %q applied but saving metadata failed: %v", name, err)
+		http.Error(w, "rollback applied but saving state failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("rollback %q da %s", name, email)
+	log.Printf("rollback %q by %s", name, email)
 	_ = json.NewEncoder(w).Encode(quick.RollbackResponse{
 		Site: name, RolledBack: true, URL: "https://" + name + "." + s.baseDomain,
 	})
 }
 
-// handlePolicy: GET legge la policy corrente, POST/PATCH la muta. Auth con ID
-// token Google; per le modifiche, se il sito è bloccato, solo l'owner.
 func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPatch {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -359,7 +348,7 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 	defer unlock()
 	cur, err := s.meta.load(name)
 	if err != nil {
-		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "could not read site state: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	if r.Method == http.MethodGet {
@@ -372,13 +361,13 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 	}
 	var req quick.PolicyRequest
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
-		http.Error(w, "json non valido", http.StatusBadRequest)
+		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	// Il lock si può cambiare solo se sei il creatore: impedisce di "rubare" un
-	// sito altrui bloccandolo a proprio nome (rilevante in modalità free).
+	// Only the creator can change the lock: stops someone from "stealing" another
+	// person's site by locking it under their own name (matters in free mode).
 	if req.Locked != nil && cur.CreatedBy != "" && cur.CreatedBy != email {
-		http.Error(w, "solo il creatore ("+cur.CreatedBy+") può bloccare il sito", http.StatusForbidden)
+		http.Error(w, "only the creator ("+cur.CreatedBy+") can lock the site", http.StatusForbidden)
 		return
 	}
 	if req.Access != nil {
@@ -389,12 +378,12 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 			cur.Access, cur.CodeHash = quick.AccessPublic, ""
 		case quick.AccessCode:
 			if req.Code == nil || *req.Code == "" {
-				http.Error(w, "access=code richiede un codice", http.StatusBadRequest)
+				http.Error(w, "access=code requires a code", http.StatusBadRequest)
 				return
 			}
 			cur.Access, cur.CodeHash = quick.AccessCode, s.meta.hashCode(*req.Code)
 		default:
-			http.Error(w, "access non valido", http.StatusBadRequest)
+			http.Error(w, "invalid access", http.StatusBadRequest)
 			return
 		}
 	}
@@ -412,7 +401,6 @@ func (s *server) handlePolicy(w http.ResponseWriter, r *http.Request, name strin
 	s.writePolicy(w, name, cur)
 }
 
-// writePolicy serializza lo stato corrente del sito (access normalizzato + esistenza).
 func (s *server) writePolicy(w http.ResponseWriter, name string, p policy) {
 	access := p.Access
 	if access == "" {
@@ -425,8 +413,6 @@ func (s *server) writePolicy(w http.ResponseWriter, name string, p policy) {
 	})
 }
 
-// handleDelete: DELETE /api/site/<name>. Elimina contenuti e metadata del sito.
-// Auth con ID token Google; se il sito è bloccato, solo l'owner può eliminarlo.
 func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name string) {
 	email, err := s.authenticate(r)
 	if err != nil {
@@ -437,7 +423,7 @@ func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name strin
 	defer unlock()
 	cur, err := s.meta.load(name)
 	if err != nil {
-		http.Error(w, "stato sito non leggibile: "+err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "could not read site state: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	if ok, reason := s.canWrite(cur, email, actDelete); !ok {
@@ -451,54 +437,35 @@ func (s *server) handleDelete(w http.ResponseWriter, r *http.Request, name strin
 	}
 	s.meta.forget(name)
 	if !existed {
-		http.Error(w, "sito non trovato", http.StatusNotFound)
+		http.Error(w, "site not found", http.StatusNotFound)
 		return
 	}
-	log.Printf("delete %q da %s", name, email)
+	log.Printf("delete %q by %s", name, email)
 	_ = json.NewEncoder(w).Encode(quick.DeleteResponse{Site: name, Deleted: true})
 }
 
 var codeForm = template.Must(template.New("code").Parse(`<!doctype html>
-<html lang="it"><head><meta charset="utf-8">
+<html lang="{{.Lang}}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Accesso protetto</title>
-<style>
-  :root{
-    --bg:#f4f4f5; --card:#fff; --fg:#18181b; --muted:#71717a;
-    --border:#e4e4e7; --ring:#18181b; --btn:#18181b; --btn-fg:#fafafa;
-    --err:#dc2626; --err-bg:#fef2f2;
-  }
-  @media (prefers-color-scheme:dark){
-    :root{
-      --bg:#09090b; --card:#161618; --fg:#fafafa; --muted:#a1a1aa;
-      --border:#27272a; --ring:#fafafa; --btn:#fafafa; --btn-fg:#18181b;
-      --err:#f87171; --err-bg:#2a1416;
-    }
-  }
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:1.5rem;
-    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-    background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
+<title>{{.T.CodeTitle}}</title>` + brandHead + `
+<style>` + brandCSS + `
+  body{display:grid;place-items:center;padding:1.5rem}
   .card{width:min(360px,100%);background:var(--card);border:1px solid var(--border);
-    border-radius:18px;padding:2rem 1.75rem;
-    box-shadow:0 1px 2px rgba(0,0,0,.04),0 14px 40px rgba(0,0,0,.10)}
+    border-radius:18px;padding:2.25rem 1.75rem;
+    box-shadow:0 1px 2px rgba(13,24,50,.05),0 18px 48px rgba(13,24,50,.10)}
   .badge{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;
-    background:var(--bg);border:1px solid var(--border);margin-bottom:1.2rem}
-  .badge svg{width:22px;height:22px;stroke:var(--fg);fill:none;
+    background:color-mix(in srgb,var(--brand) 10%,transparent);border:1px solid color-mix(in srgb,var(--brand) 22%,transparent);margin-bottom:1.2rem}
+  .badge svg{width:22px;height:22px;stroke:var(--brand);fill:none;
     stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  h1{font-size:1.15rem;font-weight:600;margin:0 0 .35rem;letter-spacing:-.01em}
+  h1{font-size:1.2rem;font-weight:700;margin:0 0 .35rem;letter-spacing:-.01em;color:var(--ink)}
   p{margin:0 0 1.4rem;color:var(--muted);font-size:.9rem}
-  p b{color:var(--fg);font-weight:600;overflow-wrap:anywhere}
+  p b{color:var(--ink);font-weight:600;overflow-wrap:anywhere}
   label{display:block;font-size:.8rem;color:var(--muted);margin:0 0 .4rem}
   input[type=password]{width:100%;padding:.72rem .85rem;font-size:1rem;color:var(--fg);
     background:transparent;border:1px solid var(--border);border-radius:11px;outline:none;
-    transition:border-color .15s,box-shadow .15s}
-  input[type=password]:focus{border-color:var(--ring);
-    box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 16%,transparent)}
-  button{width:100%;margin-top:1.05rem;padding:.74rem;font-size:.95rem;font-weight:600;
-    border:0;border-radius:11px;background:var(--btn);color:var(--btn-fg);cursor:pointer;
-    transition:opacity .15s}
-  button:hover{opacity:.88}
+    transition:border-color .15s,box-shadow .15s;font-family:var(--font-body)}
+  input[type=password]:focus{border-color:var(--ring)}
+  .btn{width:100%;margin-top:1.05rem;padding:.8rem;font-size:.95rem}
   .err{margin-top:.9rem;padding:.55rem .7rem;border-radius:9px;font-size:.83rem;
     color:var(--err);background:var(--err-bg)}
 </style></head><body>
@@ -506,19 +473,22 @@ var codeForm = template.Must(template.New("code").Parse(`<!doctype html>
   <div class="badge" aria-hidden="true">
     <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
   </div>
-  <h1>Sito protetto</h1>
-  <p>Inserisci il codice di accesso per <b>{{.Host}}</b>.</p>
+  <h1>{{.T.CodeHeading}}</h1>
+  <p>{{.T.CodeIntro}} <b>{{.Host}}</b>.</p>
   <input type="hidden" name="rd" value="{{.RD}}">
-  <label for="code">Codice</label>
+  <label for="code">{{.T.CodeLabel}}</label>
   <input id="code" type="password" name="code" placeholder="••••••••" autofocus required autocomplete="off">
-  <button type="submit">Entra</button>
-  {{if .Error}}<div class="err">Codice errato, riprova.</div>{{end}}
+  <button class="btn" type="submit">{{.T.CodeButton}}</button>
+  {{if .Error}}<div class="err">{{.T.CodeError}}</div>{{end}}
 </form></body></html>`))
 
-func renderCodeForm(w http.ResponseWriter, host, rd string, isErr bool) {
+func renderCodeForm(w http.ResponseWriter, l lang, host, rd string, isErr bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Add("Vary", "Accept-Language")
 	if isErr {
 		w.WriteHeader(http.StatusUnauthorized)
 	}
-	_ = codeForm.Execute(w, map[string]any{"Host": host, "RD": rd, "Error": isErr})
+	_ = codeForm.Execute(w, map[string]any{
+		"Host": host, "RD": rd, "Error": isErr, "Lang": string(l), "T": textsFor(l),
+	})
 }
