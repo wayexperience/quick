@@ -40,9 +40,10 @@ func (s *server) handleApexRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Vary", "Accept-Language")
 	_ = landingPage.Execute(w, map[string]any{
 		"Lang": string(l), "T": textsFor(l), "Base": s.baseDomain,
-		"Install": "curl -fsSL https://" + s.baseDomain + "/install.sh | sh",
-		"Login":   "quick login --server https://" + s.baseDomain,
-		"Deploy":  "quick deploy <name> ./folder",
+		"Install":    "curl -fsSL https://" + s.baseDomain + "/install.sh | sh",
+		"InstallWin": "irm https://" + s.baseDomain + "/install.ps1 | iex",
+		"Login":      "quick login --server https://" + s.baseDomain,
+		"Deploy":     "quick deploy <name> ./folder",
 	})
 }
 
@@ -252,7 +253,7 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 
   <div class="step">
     <div class="label"><span class="n">1</span>{{.T.LandingInstall}}</div>
-    <div class="cmd"><code>{{.Install}}</code><button class="copy" type="button" data-done="{{.T.Copied}}" onclick="cp(this)">{{.T.Copy}}</button></div>
+    <div class="cmd"><code id="install" data-win="{{.InstallWin}}">{{.Install}}</code><button class="copy" type="button" data-done="{{.T.Copied}}" onclick="cp(this)">{{.T.Copy}}</button></div>
   </div>
 
   <div class="step">
@@ -267,6 +268,7 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
   </div>
 </div>
 <script>
+(function(){var p=(navigator.userAgentData&&navigator.userAgentData.platform||navigator.platform||navigator.userAgent||"").toLowerCase();if(p.indexOf("win")>=0){var c=document.getElementById("install");if(c)c.textContent=c.dataset.win}})();
 function cp(b){navigator.clipboard.writeText(b.previousElementSibling.textContent).then(function(){var t=b.textContent;b.textContent=b.dataset.done;b.disabled=true;setTimeout(function(){b.textContent=t;b.disabled=false},1200)})}
 </script>
 </body></html>`))
