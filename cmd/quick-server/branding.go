@@ -58,13 +58,13 @@ const brandCSS = `@font-face{font-family:'Manrope';font-style:normal;font-weight
   --bg:#f5f6fb;--card:#fff;--ink:#0d1832;--fg:#0d1832;--muted:#6b7280;--border:#e6e8f0;
   --brand:#4e36f5;--brand-2:#6b57ff;--ring:#4e36f5;
   --btn:linear-gradient(135deg,#4e36f5,#6b57ff);--btn-fg:#fff;--accent:#4e36f5;
-  --err:#dc2626;--err-bg:#fef2f2;
+  --err:#dc2626;--err-bg:#fef2f2;--ok:#16a34a;
   --font-head:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,system-ui,sans-serif}
 @media (prefers-color-scheme:dark){:root{
   --bg:#080b16;--card:#121829;--ink:#eef0f6;--fg:#eef0f6;--muted:#98a2b8;--border:#222a3d;
   --brand:#6b57ff;--brand-2:#8b7bff;--ring:#8b7bff;--accent:#a89bff;
-  --err:#f87171;--err-bg:#2a1416}}
+  --err:#f87171;--err-bg:#2a1416;--ok:#34d399}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;font:400 16px/1.6 var(--font-body);background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3{font-family:var(--font-head)}

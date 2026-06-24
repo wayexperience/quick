@@ -79,10 +79,12 @@ func acceptLanguages(h string) []string {
 // sit next to inline <code>/<b> markup in the templates are split so the markup
 // stays in the template and only the prose is translated.
 type uiText struct {
-	NavDashboard, Copy, Copied string
+	NavDashboard, Copy string
 
 	LandingTitle, LandingHeadline, LandingTagline, LandingGetStarted string
 	LandingInstall, LandingLogin, LandingDeploy                      string
+
+	GuideTitle, GuideUpdate, GuideVisibility, GuideStatus, GuideRollback string
 
 	SSOTitle, SSOHeading, SSOIntro, SSOButton string
 
@@ -99,7 +101,6 @@ var uiTexts = map[lang]uiText{
 	langEN: {
 		NavDashboard: "Dashboard",
 		Copy:         "Copy",
-		Copied:       "Copied",
 
 		LandingTitle:      "quick — static hosting",
 		LandingHeadline:   "Publish a folder, get a URL.",
@@ -108,6 +109,12 @@ var uiTexts = map[lang]uiText{
 		LandingInstall:    "Install the CLI",
 		LandingLogin:      "Sign in",
 		LandingDeploy:     "Publish a folder",
+
+		GuideTitle:      "How it works",
+		GuideUpdate:     "Re-run it to update: every deploy replaces the site's files.",
+		GuideVisibility: "Choose who can open the site: company SSO, an access code, or public.",
+		GuideStatus:     "Check the site's URL, visibility and last deploy.",
+		GuideRollback:   "Restore the previous version when something goes wrong.",
 
 		SSOTitle:   "quick — access",
 		SSOHeading: "Sign-in required",
@@ -136,7 +143,6 @@ var uiTexts = map[lang]uiText{
 	langIT: {
 		NavDashboard: "Dashboard",
 		Copy:         "Copia",
-		Copied:       "Copiato",
 
 		LandingTitle:      "quick · hosting statico",
 		LandingHeadline:   "Pubblica una cartella, ottieni un URL.",
@@ -145,6 +151,12 @@ var uiTexts = map[lang]uiText{
 		LandingInstall:    "Installa la CLI",
 		LandingLogin:      "Accedi",
 		LandingDeploy:     "Pubblica una cartella",
+
+		GuideTitle:      "Come funziona",
+		GuideUpdate:     "Ripubblica per aggiornare: ogni deploy sostituisce i file del sito.",
+		GuideVisibility: "Scegli chi può aprire il sito: SSO aziendale, codice di accesso o pubblico.",
+		GuideStatus:     "Controlla URL, visibilità e ultimo deploy del sito.",
+		GuideRollback:   "Torna alla versione precedente quando qualcosa va storto.",
 
 		SSOTitle:   "quick · accesso",
 		SSOHeading: "Accesso richiesto",

@@ -218,6 +218,12 @@ code{background:var(--bg);border:1px solid var(--border);border-radius:6px;paddi
   </div>
 </div></body></html>`))
 
+// iconCopy/iconCheck stack in the same slot; cp() flips data-state to cross-fade
+// copy → check (icon swap), so the button never resizes from a "Copied" label.
+const iconCopy = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+const iconCheck = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+const copyBtn = `<button class="copy t-icon-swap" data-state="a" type="button" aria-label="{{.T.Copy}}" onclick="cp(this)"><span class="t-icon" data-icon="a">` + iconCopy + `</span><span class="t-icon" data-icon="b">` + iconCheck + `</span></button>`
+
 var landingPage = template.Must(template.New("landing").Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -227,7 +233,7 @@ var landingPage = template.Must(template.New("landing").Parse(`<!doctype html>
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:3.5rem}
 .nav{font-family:var(--font-head);font-size:.9rem;font-weight:700;border:1px solid var(--border);border-radius:10px;padding:.45rem .9rem;color:var(--ink)}
 .nav:hover{text-decoration:none;border-color:var(--brand);color:var(--brand)}
-h1{font-size:2.4rem;font-weight:800;letter-spacing:-.035em;line-height:1.08;margin:0 0 .65rem;color:var(--ink);max-width:14ch;text-wrap:balance}
+h1{font-size:2.6rem;font-weight:800;letter-spacing:-.035em;line-height:1.07;margin:0 0 .7rem;color:var(--ink);max-width:22ch;text-wrap:balance}
 .tagline{color:var(--muted);font-size:1.05rem;margin:0 0 3rem;max-width:46ch;text-wrap:pretty}
 h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 1.2rem}
 .step{margin-bottom:1.4rem}
@@ -235,10 +241,22 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 .step .n{flex:none;display:grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:999px;background:var(--btn);color:var(--btn-fg);font-size:.76rem;font-weight:700}
 .cmd{display:flex;align-items:stretch;gap:.5rem}
 .cmd code{flex:1;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:.72rem .85rem;font-size:.88rem;overflow-x:auto;white-space:nowrap;color:var(--fg);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.cmd .copy{flex:none;font-family:var(--font-head);border:1px solid var(--border);border-radius:11px;background:var(--card);color:var(--ink);font-size:.82rem;font-weight:700;padding:0 .95rem;cursor:pointer;transition:border-color .15s,color .15s}
+.cmd .copy{flex:none;width:2.7rem;display:grid;place-items:center;border:1px solid var(--border);border-radius:11px;background:var(--card);color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
 .cmd .copy:hover{border-color:var(--brand);color:var(--brand)}
+.cmd .copy svg{width:17px;height:17px;display:block}
+.t-icon-swap{position:relative;display:inline-grid}
+.t-icon-swap .t-icon{grid-area:1/1;display:grid;place-items:center;transition:opacity .25s ease-in-out,filter .25s ease-in-out,transform .25s ease-in-out;will-change:opacity,filter,transform}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],.t-icon-swap[data-state="b"] .t-icon[data-icon="b"]{opacity:1;filter:blur(0);transform:scale(1)}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],.t-icon-swap[data-state="b"] .t-icon[data-icon="a"]{opacity:0;filter:blur(2px);transform:scale(.25)}
+.t-icon-swap .t-icon[data-icon="b"]{color:var(--ok)}
+@media (prefers-reduced-motion:reduce){.t-icon-swap .t-icon{transition:none!important}}
 .result{color:var(--muted);font-size:.82rem;margin:.55rem 0 0}
 .result code{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.1rem .35rem;font-size:.85em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.guide{margin-top:3rem;padding-top:2rem;border-top:1px solid var(--border)}
+.guide .row{display:flex;gap:.85rem;align-items:baseline;padding:.55rem 0}
+.guide .row+.row{border-top:1px solid var(--border)}
+.guide code{flex:none;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:.18rem .5rem;font-size:.82rem;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.guide .desc{color:var(--muted);font-size:.9rem}
 </style></head><body>
 <div class="wrap">
   <header>
@@ -253,22 +271,30 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
 
   <div class="step">
     <div class="label"><span class="n">1</span>{{.T.LandingInstall}}</div>
-    <div class="cmd"><code id="install" data-win="{{.InstallWin}}">{{.Install}}</code><button class="copy" type="button" data-done="{{.T.Copied}}" onclick="cp(this)">{{.T.Copy}}</button></div>
+    <div class="cmd"><code id="install" data-win="{{.InstallWin}}">{{.Install}}</code>` + copyBtn + `</div>
   </div>
 
   <div class="step">
     <div class="label"><span class="n">2</span>{{.T.LandingLogin}}</div>
-    <div class="cmd"><code>{{.Login}}</code><button class="copy" type="button" data-done="{{.T.Copied}}" onclick="cp(this)">{{.T.Copy}}</button></div>
+    <div class="cmd"><code>{{.Login}}</code>` + copyBtn + `</div>
   </div>
 
   <div class="step">
     <div class="label"><span class="n">3</span>{{.T.LandingDeploy}}</div>
-    <div class="cmd"><code>{{.Deploy}}</code><button class="copy" type="button" data-done="{{.T.Copied}}" onclick="cp(this)">{{.T.Copy}}</button></div>
+    <div class="cmd"><code>{{.Deploy}}</code>` + copyBtn + `</div>
     <p class="result">→ <code>&lt;name&gt;.{{.Base}}</code></p>
+  </div>
+
+  <div class="guide">
+    <h2>{{.T.GuideTitle}}</h2>
+    <div class="row"><code>quick deploy</code><span class="desc">{{.T.GuideUpdate}}</span></div>
+    <div class="row"><code>quick private</code><span class="desc">{{.T.GuideVisibility}}</span></div>
+    <div class="row"><code>quick status</code><span class="desc">{{.T.GuideStatus}}</span></div>
+    <div class="row"><code>quick rollback</code><span class="desc">{{.T.GuideRollback}}</span></div>
   </div>
 </div>
 <script>
 (function(){var p=(navigator.userAgentData&&navigator.userAgentData.platform||navigator.platform||navigator.userAgent||"").toLowerCase();if(p.indexOf("win")>=0){var c=document.getElementById("install");if(c)c.textContent=c.dataset.win}})();
-function cp(b){navigator.clipboard.writeText(b.previousElementSibling.textContent).then(function(){var t=b.textContent;b.textContent=b.dataset.done;b.disabled=true;setTimeout(function(){b.textContent=t;b.disabled=false},1200)})}
+function cp(b){navigator.clipboard.writeText(b.previousElementSibling.textContent);b.dataset.state="b";clearTimeout(b._t);b._t=setTimeout(function(){b.dataset.state="a"},1200)}
 </script>
 </body></html>`))
