@@ -19,6 +19,7 @@ services:
     # Immagine pubblicata a ogni release (multi-arch). Per un deploy riproducibile
     # pinna una versione, es. ghcr.io/zupolgec/quick-server:0.8.1.
     image: ghcr.io/zupolgec/quick-server:latest
+    pull_policy: always   # ripulla sempre :latest al deploy (il nodo non riusa l'immagine in cache)
     restart: unless-stopped
     environment:
       QUICK_BASE_DOMAIN: ${QUICK_BASE_DOMAIN}
